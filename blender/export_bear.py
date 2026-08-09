@@ -8,6 +8,8 @@ Animation contract:
 - Exactly 5 actions ship in the GLB: ``idle-loop`` plus the four ``walk_*-loop``
   clips. ``idle-loop`` must be the rig's active action; the walk loops ride in
   muted NLA tracks and are picked up by ``export_animation_mode='ACTIONS'``.
+- Checked twice: on the source actions before export, and on the written GLB's
+  own JSON chunk afterwards, so a silently dropped clip cannot ship.
 
 Scale normalisation:
 - Export the base rigged mesh at exactly one metre tall.
@@ -16,8 +18,9 @@ Scale normalisation:
   faces, so exporting the subdivided evaluated mesh only bloats the GLB.
 """
 import bpy
+import json
 import os
-
+import struct
 # ── paths ─────────────────────────────────────────────────────────────────────
 ROOT = "/Users/alex/gamedev/gummy-bear"
 OUT = os.path.join(ROOT, "assets", "bear.glb")
@@ -196,6 +199,25 @@ try:
     print(f"GLB written: {OUT}  ({size:,} bytes)")
     if size == 0:
         raise RuntimeError("Export produced empty GLB file")
+
+    # ── verify the written GLB, not just the source actions ──────────────────
+    with open(OUT, "rb") as glb:
+        blob = glb.read()
+    if len(blob) < 20:
+        raise RuntimeError("Export produced truncated GLB header")
+    json_length, json_chunk_type = struct.unpack_from("<I4s", blob, 12)
+    if json_chunk_type != b"JSON":
+        raise RuntimeError(f"Expected JSON chunk at offset 12, got {json_chunk_type!r}")
+    if len(blob) < 20 + json_length:
+        raise RuntimeError("Export produced truncated GLB JSON chunk")
+    doc = json.loads(blob[20:20 + json_length].decode("utf-8"))
+    shipped_actions = {animation["name"] for animation in doc.get("animations", [])}
+    if shipped_actions != EXPECTED_ACTIONS:
+        raise RuntimeError(
+            f"GLB animation set mismatch: expected {sorted(EXPECTED_ACTIONS)},"
+            f" got {sorted(shipped_actions)}"
+        )
+    print(f"GLB animations verified: {sorted(shipped_actions)}")
 finally:
     # ── restore transforms, modifier visibility, selection, and mode ─────────
     mesh.matrix_basis = mesh_matrix_basis

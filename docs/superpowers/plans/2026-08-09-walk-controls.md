@@ -301,3 +301,54 @@ Harness injects movement and captures `.dev/shot_{1,2,3}.png` (t=1.5/2.1/4.0 s).
 git add scripts/gummy_bear.gd assets/bear.glb.import
 git commit -m "feat(godot): drive idle/walk BlendSpace2D from velocity"
 ```
+
+
+---
+
+## Correction block — 2026-08-09 (post-implementation, final review)
+
+The plan is left as written; these are the places it was wrong, and what the
+branch actually ships.
+
+**"bear faces +Y" (Global Constraints, line 18) is wrong.** In Blender the rig
+faces **−Y**; its right is **+X** (so its left is −X, which the line got right
+by accident). Blender Z-up → glTF Y-up maps `x, y, z` → `x, z, −y`, so the
+exported rig faces **+Z in Godot**. The walk clips were authored against the
+true −Y facing, so they are correct as shipped; only this line was wrong.
+
+**BLEND_POINTS (Task 3, Step 2, lines ≈229-237) is not what shipped.** That
+snippet's table was itself a mid-flight flip. The shipped table is the design
+spec's original one, made correct by yawing the `Model` node in
+`scenes/gummy_bear.tscn` 180° about Y so the bear faces **−Z** (third person,
+back to the default camera):
+
+```gdscript
+const BLEND_POINTS := {
+	"idle": Vector2.ZERO,
+	"walk_fwd": Vector2(0.0, -1.0),
+	"walk_back": Vector2(0.0, 1.0),
+	"walk_left": Vector2(-1.0, 0.0),
+	"walk_right": Vector2(1.0, 0.0),
+}
+```
+
+Neither `assets/bear.glb` nor `gummy-bear.blend` was re-authored for the yaw —
+it lives only in the scene. Bear forward = world −Z, bear right = world +X, and
+the `CharacterBody3D` never rotates, so `Vector2(velocity.x, velocity.z)` is
+already bear-relative.
+
+**SPEED is 1.0, not 3.0.** Measured stride speeds off the exported clips:
+`walk_fwd` 0.447 m/s, `walk_back` 0.362 m/s, strafes 0.142 m/s. 1.0 m/s is the
+compromise; residual strafe glide is accepted (no TimeScale node — out of
+scope per the spec).
+
+**Animation driver.** `_ready()` no longer calls `AnimationPlayer.play()`
+alongside the tree. `_setup_locomotion_tree()` runs first and the bare idle
+`play()` happens only when the tree could not be built, so exactly one mixer
+ever drives the skeleton.
+
+**Exporter.** `blender/export_bear.py` now re-opens the written GLB, parses its
+JSON chunk, and raises unless the animation name set equals `EXPECTED_ACTIONS`.
+
+**Skin influences.** The `>4-influence artifact` watch item is closed: the GLB
+carries only `JOINTS_0`/`WEIGHTS_0`, so 4 influences per vertex is a hard cap.

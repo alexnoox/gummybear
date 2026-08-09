@@ -4,7 +4,10 @@ extends CharacterBody3D
 ## AnimationTree/BlendSpace2D (idle + 4 directional walk loops); a damped
 ## spring drives the shader wobble and KEY_C cycles the gummy colour.
 
-const SPEED := 3.0
+## Lowered from 3.0 to match the authored stride speeds measured off the
+## exported clips (fwd 0.447 m/s, back 0.362, strafe 0.142). A residual glide
+## remains on the strafes; accepted rather than adding a TimeScale node.
+const SPEED := 1.0
 ## Horizontal velocity lerp rate (1/s). Low on purpose: gummy lag.
 const ACCEL_LERP := 5.0
 
@@ -24,16 +27,17 @@ const PALETTE: Array[Color] = [
 
 const GUMMY_MATERIAL := preload("res://materials/gummy_material.tres")
 
-## BlendSpace2D layout, fed with Vector2(velocity.x, velocity.z). Clip names
-## are bear-relative and the rig imports facing +Z (unrotated), so world +Z
-## motion is the bear walking toward its own front ("walk_fwd") and world +X
-## is a strafe toward the bear's left ("walk_left").
+## BlendSpace2D layout, fed with Vector2(velocity.x, velocity.z). Clip names are
+## bear-relative: the rig asset itself faces +Z, but scenes/gummy_bear.tscn yaws
+## the `Model` node 180° about Y, so the bear faces −Z in world (third-person,
+## away from the default camera). The CharacterBody3D never rotates, so world
+## velocity IS bear-relative: −Z is the bear's forward and +X is its right.
 const BLEND_POINTS := {
 	"idle": Vector2.ZERO,
-	"walk_fwd": Vector2(0.0, 1.0),
-	"walk_back": Vector2(0.0, -1.0),
-	"walk_left": Vector2(1.0, 0.0),
-	"walk_right": Vector2(-1.0, 0.0),
+	"walk_fwd": Vector2(0.0, -1.0),
+	"walk_back": Vector2(0.0, 1.0),
+	"walk_left": Vector2(-1.0, 0.0),
+	"walk_right": Vector2(1.0, 0.0),
 }
 
 var _mesh: MeshInstance3D
@@ -62,12 +66,17 @@ func _ready() -> void:
 		push_warning("GummyBear: no AnimationPlayer found under Model")
 	else:
 		_anim = players[0]
-		var idle := _resolve_animation("idle")
-		if idle.is_empty():
-			push_warning("GummyBear: no idle animation in %s" % [_anim.get_animation_list()])
-		else:
-			_anim.play(idle)
-			_setup_locomotion_tree()
+		_setup_locomotion_tree()
+		if _tree == null:
+			var idle := _resolve_animation("idle")
+			if idle.is_empty():
+				push_warning("GummyBear: no idle animation in %s" % [_anim.get_animation_list()])
+			else:
+				# Exactly one driver on the skeleton. The AnimationTree owns the
+				# AnimationPlayer once active, so an AnimationPlayer.play() beside
+				# it would be a second mixer racing on the same bones. Only fall
+				# back to a bare idle loop when the tree could not be built.
+				_anim.play(idle)
 
 
 ## Godot's importer may keep `idle-loop` or strip the `-loop` suffix.

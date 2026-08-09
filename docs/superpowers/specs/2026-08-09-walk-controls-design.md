@@ -100,3 +100,44 @@ suffix-tolerant `_resolve_animation()` in the loop; no editor sub-resources):
 - In-place cycle at 3.0 m/s travel may read as slight foot skate; tune amplitude only
   if it looks bad (no TimeScale node).
 - Blender MCP session state: never `bpy.ops.ed.undo()` (corrupted the armature once).
+
+---
+
+## Correction block — 2026-08-09 (post-implementation, final review)
+
+Recorded rather than rewritten: the sections above are the design as approved,
+and parts of them were wrong or were contradicted in flight. What actually
+shipped:
+
+**Facing.** The rig faces **−Y in Blender**, not +Y. Blender Z-up → glTF Y-up
+(`x, y, z` → `x, z, −y`) turns that into **+Z in Godot as exported**, i.e. the
+bear as imported faces the default camera. During implementation the blend table
+was flipped to compensate for that (`walk_fwd` at (0,+1) etc.), which was
+correct for an unrotated model but read as first-person. Final decision: yaw the
+`Model` node in `scenes/gummy_bear.tscn` 180° about Y so the bear faces **−Z**
+in world (classic third person), and restore the **original blend table of this
+spec** — `idle` (0,0), `walk_fwd` (0,−1), `walk_back` (0,+1), `walk_left` (−1,0),
+`walk_right` (+1,0). The `.glb` and `gummy-bear.blend` were **not** re-authored
+for this; the yaw lives only in the scene. With the bear facing −Z, its right is
+world **+X** and its forward is world **−Z**, and since the `CharacterBody3D`
+never rotates, world velocity is bear-relative — so `Vector2(velocity.x,
+velocity.z) / SPEED` still feeds the blend space directly (§ "Godot wiring").
+
+**SPEED.** Lowered 3.0 → **1.0** (`scripts/gummy_bear.gd`). The authored clips
+are in-place at fixed stride length; the implied ground speeds measured off the
+exported cycles are:
+
+| clip | stride speed |
+| --- | --- |
+| `walk_fwd` | 0.447 m/s |
+| `walk_back` | 0.362 m/s |
+| `walk_left` / `walk_right` | 0.142 m/s |
+
+1.0 m/s is a compromise across the three: forward reads well, the strafes still
+glide. Accepted — no TimeScale node, per the spec's own out-of-scope list. This
+supersedes the "3.0 m/s may read as slight foot skate" risk (§ Risks).
+
+**Skin influences.** The `>4-joint-influence deformation artifact` watch item
+(§ Verification) is **closed permanently, not deferred**: the shipped
+`assets/bear.glb` exports only `JOINTS_0` / `WEIGHTS_0` on its single primitive,
+so the format caps every vertex at 4 influences. There is nothing to watch.
