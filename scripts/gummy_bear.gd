@@ -1,8 +1,8 @@
 extends CharacterBody3D
 
-## Test-grade gummy bear controller.
-## Phase 4 replaces the locomotion with an AnimationTree/BlendSpace2D driver;
-## the wobble spring and colour cycling stay.
+## Gummy bear controller. WASD locomotion feeds a code-built
+## AnimationTree/BlendSpace2D (idle + 4 directional walk loops); a damped
+## spring drives the shader wobble and KEY_C cycles the gummy colour.
 
 const SPEED := 3.0
 ## Horizontal velocity lerp rate (1/s). Low on purpose: gummy lag.
@@ -24,8 +24,21 @@ const PALETTE: Array[Color] = [
 
 const GUMMY_MATERIAL := preload("res://materials/gummy_material.tres")
 
+## BlendSpace2D layout, fed with Vector2(velocity.x, velocity.z). Clip names
+## are bear-relative and the rig imports facing +Z (unrotated), so world +Z
+## motion is the bear walking toward its own front ("walk_fwd") and world +X
+## is a strafe toward the bear's left ("walk_left").
+const BLEND_POINTS := {
+	"idle": Vector2.ZERO,
+	"walk_fwd": Vector2(0.0, 1.0),
+	"walk_back": Vector2(0.0, -1.0),
+	"walk_left": Vector2(1.0, 0.0),
+	"walk_right": Vector2(-1.0, 0.0),
+}
+
 var _mesh: MeshInstance3D
 var _anim: AnimationPlayer
+var _tree: AnimationTree
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)
 
 var _wob_pos := Vector3.ZERO
@@ -54,6 +67,7 @@ func _ready() -> void:
 			push_warning("GummyBear: no idle animation in %s" % [_anim.get_animation_list()])
 		else:
 			_anim.play(idle)
+			_setup_locomotion_tree()
 
 
 ## Godot's importer may keep `idle-loop` or strip the `-loop` suffix.
@@ -66,6 +80,27 @@ func _resolve_animation(stem: String) -> String:
 		if name.begins_with(stem):
 			return name
 	return ""
+
+
+## Builds the locomotion blend tree in code so animation names stay
+## suffix-tolerant. On any missing clip the bear degrades to idle-only.
+func _setup_locomotion_tree() -> void:
+	var space := AnimationNodeBlendSpace2D.new()
+	for stem: String in BLEND_POINTS:
+		var anim_name := _resolve_animation(stem)
+		if anim_name.is_empty():
+			push_warning("GummyBear: no %s animation in %s; idle-only" %
+					[stem, _anim.get_animation_list()])
+			return
+		var clip := AnimationNodeAnimation.new()
+		clip.animation = anim_name
+		space.add_blend_point(clip, BLEND_POINTS[stem], -1, stem)
+	_tree = AnimationTree.new()
+	_tree.name = "LocomotionTree"
+	_tree.tree_root = space
+	add_child(_tree)
+	_tree.anim_player = _tree.get_path_to(_anim)
+	_tree.active = true
 
 
 func _physics_process(delta: float) -> void:
@@ -83,6 +118,10 @@ func _physics_process(delta: float) -> void:
 	velocity.z = lerpf(velocity.z, target.z, blend)
 
 	move_and_slide()
+
+	if _tree != null:
+		_tree.set("parameters/blend_position",
+				Vector2(velocity.x, velocity.z) / SPEED)
 
 
 func _update_wobble(delta: float) -> void:
