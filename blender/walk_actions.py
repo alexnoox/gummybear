@@ -371,7 +371,20 @@ def loco(name, *, swing, bend, toe, arm, lean, squash,
         sy = 1.0 + squash * SQ[i]
         twist = 0.0 if lateral else 1.0
         # root: legacy hips pitch/yaw, plus the squash and the solved floor
-        # height (lz is keyed at 0 here so plant() has a channel to solve into)
+        # height (lz is keyed at 0 here so plant() has a channel to solve into).
+        #
+        # Be clear about what siting the squash here costs. Legacy put it on
+        # `spine`, which is above the legs, so it squashed the torso only. `root`
+        # is *below* the legs and foot.* inherits scale FULL, so this scales the
+        # entire rig -- legs included. leg.L's span therefore modulates about
+        # +29% over a stride, and plant() is consequently solving the floor
+        # height against legs whose length is changing under it (correctly: it
+        # reads the evaluated pose, so scale is already baked into the sole
+        # positions it measures). This is deliberate, not an oversight: it is the
+        # convention idle-loop already established, and idle-loop's root.sy runs
+        # 0.74..1.28 against this walk's 0.84..1.16, so the walks stay strictly
+        # inside the range the rig already ships with. Siting it on `body`
+        # instead would leave the legs rigid and cost the gummy weight cue.
         pose["root"] = {"rx": lean * 0.35, "rz": 3.0 * SQ[(i + 2) % 8] * twist,
                         "lz": 0.0,
                         "sy": sy, "sxz": 1.0 - 0.55 * (sy - 1.0)}
@@ -403,17 +416,29 @@ loco("walk_left-loop", swing=18, bend=44, toe=2, arm=10, lean=-2, squash=0.15,
 loco("walk_right-loop", swing=18, bend=44, toe=2, arm=10, lean=-2, squash=0.15,
      lateral=-15, roll=7)
 
-# --- contact-frame floor check ------------------------------------------------
-# The stance sole has to sit on z=0 at both contacts and at the loop seam.
+# --- contact-frame floor check + in-place check --------------------------------
+# One evaluation pass over every walk frame, checking two things: the stance sole
+# sits on z=0 at both contacts and at the loop seam, and the rig never travels
+# horizontally. Both are guaranteed by construction, which is exactly why they
+# are asserted -- a later edit that breaks either would otherwise still print
+# WALK ACTIONS OK.
 print("CONTACTS  clip              frame stance  stance_z   swing_z")
-worst_contact, worst_swing = 0.0, 0.0
+worst_contact, worst_swing, worst_drift = 0.0, 0.0, 0.0
 for _a in sorted(bpy.data.actions, key=lambda a: a.name):
     if not _a.name.startswith(WALK_PREFIX):
         continue
     activate(_a)
-    for _f in (1, 13, 25):
+    _span = None
+    for _f in range(1, 26):
         scene.frame_set(_f)
         view_layer.update()
+        _p = (rig.matrix_world @ rig.pose.bones[SOLVER].matrix).translation
+        if _span is None:
+            _span = [_p.x, _p.x, _p.y, _p.y]
+        _span = [min(_span[0], _p.x), max(_span[1], _p.x),
+                 min(_span[2], _p.y), max(_span[3], _p.y)]
+        if _f not in (1, 13, 25):
+            continue
         _st = stance_of(_f)
         _sz = sole_z(_st)
         _wz = sole_z("R" if _st == "L" else "L")
@@ -421,10 +446,16 @@ for _a in sorted(bpy.data.actions, key=lambda a: a.name):
         worst_swing = min(worst_swing, _wz)
         print("          %-16s %5d %6s %+9.5f %+9.5f"
               % (_a.name, _f, _st, _sz, _wz))
+    _drift = max(_span[1] - _span[0], _span[3] - _span[2])
+    worst_drift = max(worst_drift, _drift)
+    print("          %-16s in-place: %s travels dx/dy <= %.9f BU"
+          % (_a.name, SOLVER, _drift))
 ad.action = None
 print("worst |stance_z| at contacts: %.6f BU" % worst_contact)
 print("lowest swing sole at contacts: %+.5f BU" % worst_swing)
+print("worst horizontal drift: %.9f BU" % worst_drift)
 assert worst_contact <= 0.01, worst_contact
+assert worst_drift < 1e-6, worst_drift
 
 # --- hand the rig back to idle-loop -------------------------------------------
 rest_all()
@@ -460,6 +491,34 @@ assert not bad, bad
 stashed = sorted((t.name, t.mute, tuple(s.action.name for s in t.strips))
                  for t in ad.nla_tracks)
 assert stashed == [(n, True, (n,)) for n in names if n != IDLE], stashed
+
+# The loop seam: frame 25 must reproduce frame 1 on every single channel, or a
+# looping clip pops. Checked per f-curve rather than per pose, so a stray key
+# inserted at one end of one channel cannot hide.
+seam = [(a.name, fc.data_path, fc.array_index, fc.evaluate(1), fc.evaluate(25))
+        for a in bpy.data.actions if a.name.startswith(WALK_PREFIX)
+        for fc in fcurves(a) if abs(fc.evaluate(1) - fc.evaluate(25)) > 1e-9]
+assert not seam, seam
+
+# "In place" at the channel level, complementing the evaluated drift check
+# above: the only bones allowed to translate at all are the floor solver and the
+# two legs (knee lift), and every one of their keys must be purely vertical once
+# taken back out of the bone's rest frame -- which is what world_loc() promises.
+for a in bpy.data.actions:
+    if not a.name.startswith(WALK_PREFIX):
+        continue
+    moves = {}
+    for fc in fcurves(a):
+        if fc.data_path.endswith(".location"):
+            moves.setdefault(fc.data_path.split('"')[1],
+                             [None, None, None])[fc.array_index] = fc
+    assert set(moves) == {SOLVER, "leg.L", "leg.R"}, (a.name, sorted(moves))
+    for _b, _chans in moves.items():
+        _basis = rest_basis(_b)
+        for _f in range(1, 26):
+            _v = _basis @ mathutils.Vector(tuple(
+                c.evaluate(_f) if c else 0.0 for c in _chans))
+            assert abs(_v.x) < 1e-9 and abs(_v.y) < 1e-9, (a.name, _b, _f, tuple(_v))
 
 bpy.ops.wm.save_mainfile(filepath=BLEND)
 print("SAVED", bpy.data.filepath)
