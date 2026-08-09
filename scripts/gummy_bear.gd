@@ -86,6 +86,11 @@ func _resolve_animation(stem: String) -> String:
 ## suffix-tolerant. On any missing clip the bear degrades to idle-only.
 func _setup_locomotion_tree() -> void:
 	var space := AnimationNodeBlendSpace2D.new()
+	# Default sync (SYNC_MODE_NONE) freezes inactive blend points, so a
+	# direction change would crossfade two 1 s walk cycles at arbitrary
+	# relative phase (leg pop). All four walks share one length, so letting
+	# every clip advance keeps them phase-locked for free.
+	space.sync_mode = AnimationNodeBlendSpace2D.SYNC_MODE_INDEPENDENT
 	for stem: String in BLEND_POINTS:
 		var anim_name := _resolve_animation(stem)
 		if anim_name.is_empty():
