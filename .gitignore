@@ -1,0 +1,13 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# Dev harness screenshots
+/.dev/
+
+# Blender backups
+*.blend1
+
+# Local-only settings
+.claude/settings.local.json
+.DS_Store

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "blender": {
+      "command": "/Users/alex/.local/bin/uvx",
+      "args": ["blender-mcp"]
+    }
+  }
+}

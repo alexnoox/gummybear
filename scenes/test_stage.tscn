@@ -1,0 +1,51 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://scripts/test_stage.gd" id="1_script"]
+[ext_resource type="PackedScene" path="res://scenes/gummy_bear.tscn" id="2_bear"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_ground"]
+size = Vector3(20, 0.1, 20)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ground"]
+albedo_color = Color(0.55, 0.55, 0.58, 1)
+roughness = 0.8
+
+[sub_resource type="BoxMesh" id="BoxMesh_ground"]
+material = SubResource("StandardMaterial3D_ground")
+size = Vector3(20, 0.1, 20)
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
+
+[sub_resource type="Sky" id="Sky_env"]
+sky_material = SubResource("ProceduralSkyMaterial_sky")
+
+[sub_resource type="Environment" id="Environment_stage"]
+background_mode = 2
+sky = SubResource("Sky_env")
+ambient_light_source = 3
+reflected_light_source = 2
+
+[node name="TestStage" type="Node3D"]
+script = ExtResource("1_script")
+
+[node name="Ground" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Ground"]
+shape = SubResource("BoxShape3D_ground")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Ground"]
+mesh = SubResource("BoxMesh_ground")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.86603, 0, 0.5, 0.38302, 0.64279, -0.66341, -0.32139, 0.76604, 0.55667, 0, 4, 0)
+shadow_enabled = true
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_stage")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.966914, 0.255101, 0, -0.255101, 0.966914, 0, 1.1, 2.35)
+fov = 50.0
+
+[node name="GummyBear" parent="." instance=ExtResource("2_bear")]
