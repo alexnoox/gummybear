@@ -4,6 +4,11 @@ Safe: does NOT delete scene objects, does NOT save over blender/gummy_bear.blend
 does NOT include cameras, lights, or backdrop in the GLB, and restores the live
 scene state in a finally block before saving the recovered root blend.
 
+Animation contract:
+- Exactly 5 actions ship in the GLB: ``idle-loop`` plus the four ``walk_*-loop``
+  clips. ``idle-loop`` must be the rig's active action; the walk loops ride in
+  muted NLA tracks and are picked up by ``export_animation_mode='ACTIONS'``.
+
 Scale normalisation:
 - Export the base rigged mesh at exactly one metre tall.
 - Keep the feet on the origin plane after Blender's Z-up → glTF Y-up conversion.
@@ -22,7 +27,14 @@ MESH_NAME = "GummyBear"
 RIG_NAME = "GummyRig"
 BONE_COUNT = 11
 EXPECTED_BASE_FACE_COUNT = 96_690
-ACTION_EXPORT_NAME = "idle-loop"
+ACTIVE_ACTION_NAME = "idle-loop"
+EXPECTED_ACTIONS = {
+    "idle-loop",
+    "walk_fwd-loop",
+    "walk_back-loop",
+    "walk_left-loop",
+    "walk_right-loop",
+}
 
 
 def world_vertex_bounds(obj):
@@ -107,28 +119,21 @@ try:
             f"type={mesh.parent_type!r}"
         )
 
-    # ── require exactly one action, and make it the active idle loop ─────────
+    # ── require the exact 5-action set with idle-loop active ─────────────────
     if rig.animation_data is None or rig.animation_data.action is None:
         raise RuntimeError(f"{RIG_NAME!r} has no active action")
-    actions = list(bpy.data.actions)
-    if len(actions) != 1:
+    action_names = {a.name for a in bpy.data.actions}
+    if action_names != EXPECTED_ACTIONS:
         raise RuntimeError(
-            f"Expected exactly 1 action, found {len(actions)}: {[a.name for a in actions]}"
+            f"Action set mismatch: expected {sorted(EXPECTED_ACTIONS)}, "
+            f"found {sorted(action_names)}"
         )
-    action = rig.animation_data.action
-    if action != actions[0]:
+    active_action = rig.animation_data.action
+    if active_action.name != ACTIVE_ACTION_NAME:
         raise RuntimeError(
-            f"Active action {action.name!r} does not match sole action {actions[0].name!r}"
+            f"Active action must be {ACTIVE_ACTION_NAME!r}, got {active_action.name!r}"
         )
-    original_action_name = action.name
-    action.name = ACTION_EXPORT_NAME
-    print(f"Action: {original_action_name!r} → {ACTION_EXPORT_NAME!r}")
-    bpy.ops.wm.save_mainfile(filepath=EXPECTED_BLEND)
-    print(
-        "Saved root state with action="
-        f"{ACTION_EXPORT_NAME!r} before temporary export transforms: {EXPECTED_BLEND}"
-    )
-
+    print(f"Actions validated: {sorted(action_names)}  active={active_action.name!r}")
 
     # ── verify base mesh size and compute one-metre export transform ─────────
     base_face_count = len(mesh.data.polygons)
