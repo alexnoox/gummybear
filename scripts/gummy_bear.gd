@@ -1,8 +1,8 @@
 extends CharacterBody3D
 
 ## Gummy bear controller. WASD locomotion feeds a code-built
-## AnimationTree/BlendSpace2D (idle + 4 directional walk loops); a damped
-## spring drives the shader wobble and KEY_C cycles the gummy colour.
+## AnimationTree/BlendSpace2D (idle + 4 directional walk loops); Space jumps
+## while grounded and KEY_C cycles the gummy colour.
 
 ## Lowered from 3.0 to match the authored stride speeds measured off the
 ## exported clips (fwd 0.447 m/s, back 0.362, strafe 0.142). A residual glide
@@ -10,12 +10,8 @@ extends CharacterBody3D
 const SPEED := 1.0
 ## Horizontal velocity lerp rate (1/s). Low on purpose: gummy lag.
 const ACCEL_LERP := 5.0
-
-# Damped spring driving the shader's vertex wobble.
-const STIFF := 300.0      # omega ~= 17 rad/s ~= 2.8 Hz
-const DAMP := 12.0        # zeta ~= 0.35 -> settles in ~0.3 s
-const ACCEL_GAIN := 0.004 # metres of sag per m/s^2 of body acceleration
-const MAX_WOBBLE := 0.12  # metres, hard clamp so the mesh never shreds
+## Upward takeoff speed in metres per second.
+const JUMP_VELOCITY := 2.8
 
 const PALETTE: Array[Color] = [
 	Color(0.9, 0.08, 0.15, 0.8),  # cherry
@@ -45,9 +41,6 @@ var _anim: AnimationPlayer
 var _tree: AnimationTree
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)
 
-var _wob_pos := Vector3.ZERO
-var _wob_vel := Vector3.ZERO
-var _prev_vel := Vector3.ZERO
 var _colour_index := 0
 
 
@@ -118,11 +111,9 @@ func _setup_locomotion_tree() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	# Wobble first: reads whatever velocity this tick starts with, including
-	# impulses injected by the test harness before children process.
-	_update_wobble(delta)
-
-	if not is_on_floor():
+	if is_on_floor() and Input.is_action_just_pressed("jump"):
+		velocity.y = JUMP_VELOCITY
+	elif not is_on_floor():
 		velocity.y -= _gravity * delta
 
 	var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
@@ -136,18 +127,6 @@ func _physics_process(delta: float) -> void:
 	if _tree != null:
 		_tree.set("parameters/blend_position",
 				Vector2(velocity.x, velocity.z) / SPEED)
-
-
-func _update_wobble(delta: float) -> void:
-	if _mesh == null or delta <= 0.0:
-		return
-	var accel := (velocity - _prev_vel) / delta
-	_prev_vel = velocity
-	_wob_vel += (-STIFF * _wob_pos - DAMP * _wob_vel - accel * ACCEL_GAIN * STIFF) * delta
-	_wob_pos += _wob_vel * delta
-	# The shader displaces model-space VERTEX, so undo the mesh's world basis.
-	var local: Vector3 = _mesh.global_basis.inverse() * _wob_pos
-	_mesh.set_instance_shader_parameter("wobble_offset", local.limit_length(MAX_WOBBLE))
 
 
 func _unhandled_key_input(event: InputEvent) -> void:

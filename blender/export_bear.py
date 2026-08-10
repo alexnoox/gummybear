@@ -10,6 +10,7 @@ Animation contract:
   muted NLA tracks and are picked up by ``export_animation_mode='ACTIONS'``.
 - Checked twice: on the source actions before export, and on the written GLB's
   own JSON chunk afterwards, so a silently dropped clip cannot ship.
+- No action may animate bone scale; the shipped silhouette remains stable.
 
 Scale normalisation:
 - Export the base rigged mesh at exactly one metre tall.
@@ -68,6 +69,28 @@ def restore_mode(mode_name, active_obj):
     target_mode = mode_map.get(mode_name)
     if target_mode is not None:
         bpy.ops.object.mode_set(mode=target_mode)
+
+
+def action_fcurves(action):
+    for layer in action.layers:
+        for strip in layer.strips:
+            for channelbag in strip.channelbags:
+                yield from channelbag.fcurves
+
+
+def read_vec3_accessor(document, binary, accessor_index):
+    accessor = document["accessors"][accessor_index]
+    if accessor["componentType"] != 5126 or accessor["type"] != "VEC3":
+        raise RuntimeError(
+            f"Expected FLOAT VEC3 accessor, got {accessor}"
+        )
+    view = document["bufferViews"][accessor["bufferView"]]
+    offset = view.get("byteOffset", 0) + accessor.get("byteOffset", 0)
+    stride = view.get("byteStride", 12)
+    return [
+        struct.unpack_from("<3f", binary, offset + sample * stride)
+        for sample in range(accessor["count"])
+    ]
 
 
 # ── guard: must be operating on the recovered root blend ─────────────────────
@@ -137,6 +160,14 @@ try:
             f"Active action must be {ACTIVE_ACTION_NAME!r}, got {active_action.name!r}"
         )
     print(f"Actions validated: {sorted(action_names)}  active={active_action.name!r}")
+    scaled_channels = [
+        (action.name, fcurve.data_path)
+        for action in bpy.data.actions
+        for fcurve in action_fcurves(action)
+        if fcurve.data_path.endswith(".scale")
+    ]
+    if scaled_channels:
+        raise RuntimeError(f"Scale animation is forbidden: {scaled_channels}")
 
     # ── verify base mesh size and compute one-metre export transform ─────────
     base_face_count = len(mesh.data.polygons)
@@ -211,6 +242,21 @@ try:
     if len(blob) < 20 + json_length:
         raise RuntimeError("Export produced truncated GLB JSON chunk")
     doc = json.loads(blob[20:20 + json_length].decode("utf-8"))
+    binary_header_offset = 20 + json_length
+    if len(blob) < binary_header_offset + 8:
+        raise RuntimeError("Export produced no GLB binary chunk")
+    binary_length, binary_chunk_type = struct.unpack_from(
+        "<I4s", blob, binary_header_offset
+    )
+    if binary_chunk_type != b"BIN\x00":
+        raise RuntimeError(
+            f"Expected BIN chunk after JSON, got {binary_chunk_type!r}"
+        )
+    binary_start = binary_header_offset + 8
+    binary = blob[binary_start:binary_start + binary_length]
+    if len(binary) != binary_length:
+        raise RuntimeError("Export produced truncated GLB binary chunk")
+
     shipped_actions = {animation["name"] for animation in doc.get("animations", [])}
     if shipped_actions != EXPECTED_ACTIONS:
         raise RuntimeError(
@@ -218,6 +264,30 @@ try:
             f" got {sorted(shipped_actions)}"
         )
     print(f"GLB animations verified: {sorted(shipped_actions)}")
+    scale_channel_count = 0
+    unstable_scale_channels = []
+    for animation in doc.get("animations", []):
+        for channel in animation.get("channels", []):
+            if channel.get("target", {}).get("path") != "scale":
+                continue
+            scale_channel_count += 1
+            sampler = animation["samplers"][channel["sampler"]]
+            samples = read_vec3_accessor(doc, binary, sampler["output"])
+            identity_error = max(
+                abs(component - 1.0)
+                for sample in samples
+                for component in sample
+            )
+            if identity_error > 1e-5:
+                unstable_scale_channels.append(
+                    (animation["name"], channel["target"].get("node"),
+                     identity_error)
+                )
+    if unstable_scale_channels:
+        raise RuntimeError(
+            f"GLB contains non-identity scale animation: {unstable_scale_channels}"
+        )
+    print(f"GLB scale samples verified: {scale_channel_count} static identity channels")
 finally:
     # ── restore transforms, modifier visibility, selection, and mode ─────────
     mesh.matrix_basis = mesh_matrix_basis

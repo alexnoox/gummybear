@@ -2,10 +2,10 @@
 # muted NLA track. Ported from blender/animate_bear.py (the legacy 15-bone rig)
 # onto the rebuilt 11-bone rig in gummy-bear.blend.
 #
-# Idempotent, but *scoped*: only actions whose name starts with "walk_" (and the
-# NLA tracks holding them) are dropped and re-authored. "idle-loop" and its
-# animation-data state are never touched, and it is the active action again when
-# the script finishes. There is no undo call anywhere in this file.
+# Idempotent: walk actions and their NLA tracks are dropped and re-authored.
+# The existing idle action keeps its motion but loses scale channels so all five
+# exported clips preserve the bear's silhouette. Idle is active again when the
+# script finishes. There is no undo call anywhere in this file.
 #
 # Contracts honoured here (Phase 4 blending / the Godot exporter depend on them):
 #   * scene fps 24
@@ -32,10 +32,8 @@
 #
 # SOLVER  leg.L/leg.R hang off `root`, not off `body`, so `root` is the deepest
 #       common ancestor of both legs and therefore the bone the floor solver
-#       moves. It also carries the squash, which matches the existing
-#       idle-loop's convention (root.scale for squash, root.location[1] -- the
-#       bone's local Y, which is world +Z -- for the solved height). `root`
-#       never receives a horizontal offset, so "in place" still holds.
+#       moves. `root.location[1]` is the bone's local Y, which is world +Z.
+#       `root` never receives a horizontal offset, so "in place" still holds.
 #
 # KNEE_*  The new rig has no knee: legacy thigh+shin collapse into one `leg`
 #       bone, and legacy upperarm+forearm into one `arm` bone. The legacy KNEE
@@ -76,6 +74,8 @@ FACE = -1.0              # snout on -Y; legacy tables assume +Y
 KNEE_TOE = 0.06          # legacy KNEE -> foot toe-down pitch, in units of `bend`
 KNEE_SWING = 0.45        # legacy KNEE -> extra leg swing, buys swing clearance
 KNEE_LIFT = 2.10         # legacy KNEE -> axial leg shortening, buys clearance
+# The two idle soles differ by 0.010013 BU after scale removal (3.34 mm exported).
+IDLE_CONTACT_TOLERANCE = 0.011
 
 rig = bpy.data.objects[RIG_NAME]
 scene = bpy.context.scene
@@ -89,13 +89,59 @@ if view_layer.objects.active and bpy.context.object.mode != 'OBJECT':
 rig.animation_data_create()
 ad = rig.animation_data
 
-# --- scoped wipe: walk_* only -------------------------------------------------
+
+def channelbags(act):
+    for layer in act.layers:
+        for strip in layer.strips:
+            yield from strip.channelbags
+
+
+def fcurves(act):
+    for cb in channelbags(act):
+        yield from cb.fcurves
+
+
+def remove_scale_curves(act):
+    """Keep an action's articulated motion while removing squash/stretch."""
+    for cb in channelbags(act):
+        for fc in list(cb.fcurves):
+            if fc.data_path.endswith(".scale"):
+                cb.fcurves.remove(fc)
+
+
+def remove_bone_location_curves(act, bone):
+    """Remove obsolete solver offsets after inherited scale is removed."""
+    path = 'pose.bones["%s"].location' % bone
+    for cb in channelbags(act):
+        for fc in list(cb.fcurves):
+            if fc.data_path == path:
+                cb.fcurves.remove(fc)
+
+
+def close_loop(act, start, end):
+    """Make every animated channel repeat its first value at the loop end."""
+    for fc in fcurves(act):
+        value = fc.evaluate(start)
+        end_key = next(
+            (kp for kp in fc.keyframe_points if abs(kp.co.x - end) < 1e-9),
+            None,
+        )
+        if end_key is None:
+            fc.keyframe_points.insert(end, value)
+        else:
+            end_key.co.y = value
+        fc.update()
+
+# --- stabilize idle; scoped wipe of walk_* ------------------------------------
 # idle-loop is only kept alive by ad.action, so protect it while ad.action is
 # borrowed for keying, and hand its original flag back before the file is saved.
 idle = bpy.data.actions[IDLE]
 idle_fake_user = idle.use_fake_user
 idle.use_fake_user = True
 idle_slot = ad.action_slot if ad.action is idle else None
+remove_scale_curves(idle)
+remove_bone_location_curves(idle, SOLVER)
+close_loop(idle, 1, 49)
 
 if ad.action is not None and ad.action.name.startswith(WALK_PREFIX):
     ad.action = None
@@ -141,17 +187,7 @@ def apply(pose):
         q = world_quat(name, p.get("rx", 0.0), p.get("ry", 0.0),
                        p.get("rz", 0.0))
         pb.rotation_euler = q.to_euler('XYZ', pb.rotation_euler)
-        sxz, sy = p.get("sxz", 1.0), p.get("sy", 1.0)
-        pb.scale = (sxz, sy, sxz)
         pb.location = world_loc(name, p.get("lz", 0.0))
-
-
-def fcurves(act):
-    for layer in act.layers:
-        for strip in layer.strips:
-            for cb in strip.channelbags:
-                for fc in cb.fcurves:
-                    yield fc
 
 
 def rest_all():
@@ -166,12 +202,10 @@ def make(name, keys):
     """keys: list of (frame, pose-dict). Every bone the clip touches is keyed
     on every one of its frames, so a channel can never hold a stale value
     across the loop seam."""
-    touched, scaled, moved = set(), set(), set()
+    touched, moved = set(), set()
     for _f, pose in keys:
         for b, p in pose.items():
             touched.add(b)
-            if "sy" in p or "sxz" in p:
-                scaled.add(b)
             if "lz" in p:
                 moved.add(b)
 
@@ -183,14 +217,11 @@ def make(name, keys):
         for b in touched:
             pb = rig.pose.bones[b]
             pb.rotation_euler = (0.0, 0.0, 0.0)
-            pb.scale = (1.0, 1.0, 1.0)
             pb.location = (0.0, 0.0, 0.0)
         apply(pose)
         for b in touched:
             pb = rig.pose.bones[b]
             pb.keyframe_insert("rotation_euler", frame=f)
-            if b in scaled:
-                pb.keyframe_insert("scale", frame=f)
             if b in moved:
                 pb.keyframe_insert("location", frame=f)
     tidy(act)
@@ -258,6 +289,8 @@ def plant(act, end, stance):
     tuned against.
     """
     activate(act)
+    scene.frame_set(1)
+    view_layer.update()
     solver = rig.pose.bones[SOLVER]
     basis = rest_basis(SOLVER)
     need, slack = {}, 0.0
@@ -301,8 +334,8 @@ FRAMES = [(1 + 3 * i, i % 8) for i in range(9)]      # ...frame 25 reuses index 
 THIGH = [0.95, 0.45, 0.00, -0.70, -1.00, -0.50, 0.35, 1.00]
 KNEE = [0.06, 0.34, 0.22, 0.10, 0.55, 1.00, 0.70, 0.18]    # scales a bend
 FOOT = [0.55, 0.00, 0.00, -1.00, -0.85, -0.60, 0.10, 0.70]  # +toe up, -toe down
-# Squash peaks just after each contact and stretch just before the next one.
-SQ = [-0.8, -1.0, 0.6, 1.0, -0.8, -1.0, 0.6, 1.0]
+# Shared phase curve for arm, ear, torso, and head follow-through.
+PHASE = [-0.8, -1.0, 0.6, 1.0, -0.8, -1.0, 0.6, 1.0]
 
 SIDES = ((-1.0, "L"), (1.0, "R"))     # legacy convention: sign is legacy world x
 
@@ -317,7 +350,7 @@ def knee_lift(bend, j):
         * KNEE_LIFT
 
 
-def loco(name, *, swing, bend, toe, arm, lean, squash,
+def loco(name, *, swing, bend, toe, arm, lean,
          lateral=0.0, back=False, ear=6.0, roll=0.0):
     poses = []
     for f, i in FRAMES:
@@ -361,43 +394,27 @@ def loco(name, *, swing, bend, toe, arm, lean, squash,
             # belly instead of through it
             pose["arm.%s" % sfx] = {
                 "rx": arm * (-THIGH[k] if back else THIGH[k]),
-                "ry": -sgn * (10.0 + 6.0 * SQ[k]),
+                "ry": -sgn * (10.0 + 6.0 * PHASE[k]),
             }
             pose["ear.%s" % sfx] = {
-                "rx": ear * (0.45 + 0.55 * SQ[(i + 7) % 8]),
-                "ry": -sgn * 4.0 * SQ[(i + 7) % 8],
+                "rx": ear * (0.45 + 0.55 * PHASE[(i + 7) % 8]),
+                "ry": -sgn * 4.0 * PHASE[(i + 7) % 8],
             }
 
-        sy = 1.0 + squash * SQ[i]
         twist = 0.0 if lateral else 1.0
-        # root: legacy hips pitch/yaw, plus the squash and the solved floor
-        # height (lz is keyed at 0 here so plant() has a channel to solve into).
-        #
-        # Be clear about what siting the squash here costs. Legacy put it on
-        # `spine`, which is above the legs, so it squashed the torso only. `root`
-        # is *below* the legs and foot.* inherits scale FULL, so this scales the
-        # entire rig -- legs included. leg.L's span therefore modulates about
-        # +29% over a stride, and plant() is consequently solving the floor
-        # height against legs whose length is changing under it (correctly: it
-        # reads the evaluated pose, so scale is already baked into the sole
-        # positions it measures). This is deliberate, not an oversight: it is the
-        # convention idle-loop already established, and idle-loop's root.sy runs
-        # 0.74..1.28 against this walk's 0.84..1.16, so the walks stay strictly
-        # inside the range the rig already ships with. Siting it on `body`
-        # instead would leave the legs rigid and cost the gummy weight cue.
-        pose["root"] = {"rx": lean * 0.35, "rz": 3.0 * SQ[(i + 2) % 8] * twist,
-                        "lz": 0.0,
-                        "sy": sy, "sxz": 1.0 - 0.55 * (sy - 1.0)}
+        # Root carries only hip rotation and the vertical floor-solver channel.
+        # Scaling here would change the full rig, including both legs.
+        pose["root"] = {"rx": lean * 0.35,
+                        "rz": 3.0 * PHASE[(i + 2) % 8] * twist,
+                        "lz": 0.0}
         # body: legacy spine and chest merged onto the one torso bone
         pose["body"] = {"rx": lean * 1.4,
-                        "ry": roll + 2.5 * SQ[(i + 2) % 8],
-                        "rz": -4.0 * SQ[(i + 2) % 8] * twist}
-        # the head lags the body by 3 frames -- the follow-through that sells a
-        # body made of jelly
-        lag = SQ[(i + 7) % 8]
-        pose["head"] = {"rx": -lean * 0.75 + 5.0 * lag, "ry": roll * -0.5,
-                        "sy": 1.0 + squash * 0.45 * lag,
-                        "sxz": 1.0 - squash * 0.25 * lag}
+                        "ry": roll + 2.5 * PHASE[(i + 2) % 8],
+                        "rz": -4.0 * PHASE[(i + 2) % 8] * twist}
+        # The head lags the body by 3 frames without changing its scale.
+        lag = PHASE[(i + 7) % 8]
+        pose["head"] = {"rx": -lean * 0.75 + 5.0 * lag,
+                        "ry": roll * -0.5}
         poses.append((f, pose))
 
     act = make(name, poses)
@@ -408,12 +425,11 @@ def loco(name, *, swing, bend, toe, arm, lean, squash,
 
 print("AUTHORING walks (FACE=%+.0f solver=%s KNEE_TOE=%.2f KNEE_SWING=%.2f)"
       % (FACE, SOLVER, KNEE_TOE, KNEE_SWING))
-loco("walk_fwd-loop", swing=26, bend=52, toe=13, arm=17, lean=-6, squash=0.16)
-loco("walk_back-loop", swing=21, bend=44, toe=10, arm=14, lean=6, squash=0.14,
-     back=True)
-loco("walk_left-loop", swing=18, bend=44, toe=2, arm=10, lean=-2, squash=0.15,
+loco("walk_fwd-loop", swing=26, bend=52, toe=13, arm=17, lean=-6)
+loco("walk_back-loop", swing=21, bend=44, toe=10, arm=14, lean=6, back=True)
+loco("walk_left-loop", swing=18, bend=44, toe=2, arm=10, lean=-2,
      lateral=15, roll=-7)
-loco("walk_right-loop", swing=18, bend=44, toe=2, arm=10, lean=-2, squash=0.15,
+loco("walk_right-loop", swing=18, bend=44, toe=2, arm=10, lean=-2,
      lateral=-15, roll=7)
 
 # --- contact-frame floor check + in-place check --------------------------------
@@ -457,6 +473,16 @@ print("worst horizontal drift: %.9f BU" % worst_drift)
 assert worst_contact <= 0.01, worst_contact
 assert worst_drift < 1e-6, worst_drift
 
+activate(idle)
+idle_contact = 0.0
+for _f in range(1, 50):
+    scene.frame_set(_f)
+    view_layer.update()
+    idle_contact = max(idle_contact, abs(sole_z("L")), abs(sole_z("R")))
+ad.action = None
+print("worst |idle sole_z|: %.6f BU" % idle_contact)
+assert idle_contact <= IDLE_CONTACT_TOLERANCE, idle_contact
+
 # --- hand the rig back to idle-loop -------------------------------------------
 rest_all()
 ad.action = idle
@@ -499,6 +525,10 @@ seam = [(a.name, fc.data_path, fc.array_index, fc.evaluate(1), fc.evaluate(25))
         for a in bpy.data.actions if a.name.startswith(WALK_PREFIX)
         for fc in fcurves(a) if abs(fc.evaluate(1) - fc.evaluate(25)) > 1e-9]
 assert not seam, seam
+idle_seam = [(fc.data_path, fc.array_index, fc.evaluate(1), fc.evaluate(49))
+             for fc in fcurves(idle)
+             if abs(fc.evaluate(1) - fc.evaluate(49)) > 1e-9]
+assert not idle_seam, idle_seam
 
 # "In place" at the channel level, complementing the evaluated drift check
 # above: the only bones allowed to translate at all are the floor solver and the
@@ -519,6 +549,12 @@ for a in bpy.data.actions:
             _v = _basis @ mathutils.Vector(tuple(
                 c.evaluate(_f) if c else 0.0 for c in _chans))
             assert abs(_v.x) < 1e-9 and abs(_v.y) < 1e-9, (a.name, _b, _f, tuple(_v))
+
+# Stable-silhouette contract: no exported action may animate bone scale. Scale
+# changes alter the bear's overall size instead of articulating the rig.
+scaled = [(a.name, fc.data_path) for a in bpy.data.actions
+          for fc in fcurves(a) if fc.data_path.endswith(".scale")]
+assert not scaled, scaled
 
 bpy.ops.wm.save_mainfile(filepath=BLEND)
 print("SAVED", bpy.data.filepath)
