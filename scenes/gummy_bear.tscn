@@ -1,7 +1,8 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/gummy_bear.gd" id="1_script"]
 [ext_resource type="PackedScene" path="res://assets/bear.glb" id="2_model"]
+[ext_resource type="Script" path="res://scripts/orbit_camera.gd" id="3_orbit"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
 radius = 0.24
@@ -16,3 +17,14 @@ shape = SubResource("CapsuleShape3D_body")
 
 [node name="Model" parent="." instance=ExtResource("2_model")]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
+
+[node name="CameraRig" type="Node3D" parent="."]
+script = ExtResource("3_orbit")
+
+[node name="SpringArm3D" type="SpringArm3D" parent="CameraRig"]
+transform = Transform3D(1, 0, 0, 0, 0.965926, 0.258819, 0, -0.258819, 0.965926, 0, 0, 0)
+spring_length = 2.6
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig/SpringArm3D"]
+fov = 50.0
+current = true

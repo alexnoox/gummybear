@@ -44,8 +44,4 @@ shadow_enabled = true
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_stage")
 
-[node name="Camera3D" type="Camera3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 0.966914, 0.255101, 0, -0.255101, 0.966914, 0, 1.1, 2.35)
-fov = 50.0
-
 [node name="GummyBear" parent="." instance=ExtResource("2_bear")]
