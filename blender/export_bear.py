@@ -1,6 +1,6 @@
 """Export the rigged, animated GummyBear to assets/bear.glb.
 
-Safe: does NOT delete scene objects, does NOT save over blender/gummy_bear.blend,
+Safe: does NOT delete scene objects, does NOT save over gummy-bear.blend,
 does NOT include cameras, lights, or backdrop in the GLB, and restores the live
 scene state in a finally block before saving the recovered root blend.
 

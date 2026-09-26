@@ -1,6 +1,6 @@
 # Author the four in-place walk loops on GummyRig and stash each one in its own
-# muted NLA track. Ported from blender/animate_bear.py (the legacy 15-bone rig)
-# onto the rebuilt 11-bone rig in gummy-bear.blend.
+# muted NLA track. Ported from the legacy animate_bear.py (removed; see git
+# history) onto the rebuilt 11-bone rig in gummy-bear.blend.
 #
 # Idempotent: walk actions and their NLA tracks are dropped and re-authored.
 # The existing idle action keeps its motion but loses scale channels so all five

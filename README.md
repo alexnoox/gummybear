@@ -1,9 +1,8 @@
 # Gummy Bear
 
-A procedurally built, rigged, and animated gummy bear character PoC. The whole
-asset pipeline is scripted: Blender builds the mesh from metaballs, rigs it,
-authors the animation loops, and exports a GLB that Godot drives with a
-code-built locomotion blend tree.
+A rigged, animated gummy bear character PoC. The mesh and 11-bone rig live in
+`gummy-bear.blend`; scripts author the walk loops and export a GLB that Godot
+drives with a code-built locomotion blend tree under a mouse-orbit camera.
 
 ![Gummy bear render](renders/final_Cam34.png)
 
@@ -24,25 +23,24 @@ code-built locomotion blend tree.
 
 ```
 blender/            Asset pipeline scripts (run inside Blender against gummy-bear.blend)
-  build_bear.py       Metaball -> remesh -> decimate mesh build (1 m tall, feet on z=0)
-  rig_bear.py         Armature + skinning
   walk_actions.py     Four in-place walk loops (24 fps, frames 1-25, shared contact phase)
-  animate_bear.py     Legacy idle/walk authoring (superseded by walk_actions.py)
   export_bear.py      Exports assets/bear.glb (idle + 4 walk clips, nothing else)
+gummy-bear.blend    Source mesh, rig and idle action (hand-maintained)
 assets/bear.glb     Exported character consumed by Godot
 scenes/             gummy_bear.tscn (character), test_stage.tscn (main scene)
-scripts/            gummy_bear.gd (controller), test_stage.gd (dev harness)
+scripts/            gummy_bear.gd (controller), orbit_camera.gd (camera rig),
+                    test_stage.gd (dev harness)
 shaders/            gummy.gdshader (translucent candy look, rim light, contact fade)
-docs/specs/         Design specs
-renders/            Blender evidence renders
+docs/               Specs, ADRs, plans
+renders/            README hero render
 ```
 
 ## How it works
 
 - `scripts/gummy_bear.gd` finds the GLB's `AnimationPlayer` at runtime and
   builds an `AnimationTree` with a `BlendSpace2D` in code (idle at the origin,
-  the four walk loops on the axes). Blend position is fed directly from
-  horizontal velocity; `SYNC_MODE_INDEPENDENT` keeps the phase-locked walk
+  the four walk loops on the axes). Blend position is fed body-local horizontal
+  velocity (strafe mode, see docs/adr/0001-orbit-camera-strafe-mode.md); `SYNC_MODE_INDEPENDENT` keeps the phase-locked walk
   cycles from popping on direction changes.
 - Movement is a plain `CharacterBody3D`: lerped horizontal velocity (deliberate
   gummy lag), gravity, and a physics-only grounded jump — no jump animation,
@@ -65,8 +63,15 @@ godot -- --shots
 
 ## Rebuilding the asset
 
-Run the scripts in `blender/` against `gummy-bear.blend` (build → rig →
-animate → export). Each script is idempotent and `export_bear.py` writes
-`assets/bear.glb` without touching the source .blend. Contract: bear is 1 m
-tall, feet on the floor, exactly five exported actions (`idle`, `walk_fwd`,
-`walk_back`, `walk_left`, `walk_right`).
+The mesh, rig and idle action are hand-maintained in `gummy-bear.blend`; there
+is no script that rebuilds them. With that file open in Blender, run
+`blender/walk_actions.py` (re-authors the four walk loops) and then
+`blender/export_bear.py` (writes `assets/bear.glb`). Both scripts validate
+their contracts before writing and **save over `gummy-bear.blend`**, so commit
+or back up first. Headless:
+
+    blender -b gummy-bear.blend --python blender/walk_actions.py
+    blender -b gummy-bear.blend --python blender/export_bear.py
+
+Contract: bear is 1 m tall, feet on the floor, exactly five exported actions
+(`idle-loop` plus `walk_{fwd,back,left,right}-loop`), no scale animation.

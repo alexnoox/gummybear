@@ -1,8 +1,9 @@
 # gummy-bear
 
-Godot 4 third-person character project. The bear model is authored in Blender
-(`gummy-bear.blend`) and exported to `assets/bear.glb` via `blender/export_bear.py`;
-gameplay lives in `scripts/gummy_bear.gd`.
+Godot 4 third-person character project. The bear's mesh, rig and idle action
+are hand-maintained in Blender (`gummy-bear.blend`); `blender/walk_actions.py`
+authors the walk loops and `blender/export_bear.py` exports `assets/bear.glb`.
+Gameplay lives in `scripts/gummy_bear.gd` and `scripts/orbit_camera.gd`.
 
 ## Agent skills
 
