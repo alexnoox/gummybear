@@ -61,9 +61,11 @@
 import bpy
 import math
 import mathutils
+import os
 
-BLEND = "/Users/alex/gamedev/gummy-bear/gummy-bear.blend"
-assert bpy.data.filepath == BLEND, ("wrong blend open: %r" % bpy.data.filepath)
+BLEND = os.path.normpath(bpy.data.filepath)
+assert os.path.basename(BLEND) == "gummy-bear.blend", (
+    "wrong blend open: %r" % bpy.data.filepath)
 
 RIG_NAME = "GummyRig"
 IDLE = "idle-loop"

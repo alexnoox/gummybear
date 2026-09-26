@@ -22,10 +22,11 @@ import bpy
 import json
 import os
 import struct
-# ── paths ─────────────────────────────────────────────────────────────────────
-ROOT = "/Users/alex/gamedev/gummy-bear"
+# ── paths: everything is relative to the open blend, which sits at repo root ──
+BLEND_NAME = "gummy-bear.blend"
+EXPECTED_BLEND = os.path.normpath(bpy.data.filepath)
+ROOT = os.path.dirname(EXPECTED_BLEND)
 OUT = os.path.join(ROOT, "assets", "bear.glb")
-EXPECTED_BLEND = os.path.join(ROOT, "gummy-bear.blend")
 
 MESH_NAME = "GummyBear"
 RIG_NAME = "GummyRig"
@@ -94,10 +95,9 @@ def read_vec3_accessor(document, binary, accessor_index):
 
 
 # ── guard: must be operating on the recovered root blend ─────────────────────
-actual = bpy.data.filepath
-if os.path.normpath(actual) != os.path.normpath(EXPECTED_BLEND):
+if os.path.basename(EXPECTED_BLEND) != BLEND_NAME:
     raise RuntimeError(
-        f"Wrong file open: expected {EXPECTED_BLEND!r}, got {actual!r}"
+        f"Wrong file open: expected {BLEND_NAME!r}, got {bpy.data.filepath!r}"
     )
 
 # ── resolve required objects ─────────────────────────────────────────────────
