@@ -11,3 +11,8 @@
 # Local-only settings
 .claude/settings.local.json
 .DS_Store
+
+# Blender iteration renders stay local; only the README hero image is tracked
+/renders/*
+!/renders/final_Cam34.png
+!/renders/.gdignore
