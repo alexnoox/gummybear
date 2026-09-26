@@ -3,8 +3,9 @@ extends Node3D
 
 ## Mouse-orbit third-person rig for the gummy bear. Lives under the
 ## CharacterBody3D but runs top-level so the body's yaw (which chases this
-## rig's yaw) never compounds with mouse look; each physics tick it snaps to
-## the bear's position. The rig is crisp on purpose: all the gummy lag lives
+## rig's yaw) never compounds with mouse look; every rendered frame it snaps
+## to the bear's interpolated position, with automatic interpolation off, so
+## mouse look stays frame-rate crisp. The rig is crisp on purpose: all the gummy lag lives
 ## in the body's velocity/yaw lerps. Esc toggles cursor capture (a left click also recaptures), the wheel
 ## zooms the spring arm, pitch is clamped so the camera neither dives under
 ## the stage nor flips over the bear.
@@ -36,6 +37,10 @@ func _ready() -> void:
 	# yaw every tick, so inheriting it would feed mouse look back into
 	# itself and spin the camera.
 	top_level = true
+	# Mouse look lands between physics ticks, so this rig (and its arm and
+	# camera, which inherit the mode) is positioned by hand every frame
+	# instead of being auto-interpolated.
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	# The arm should only shorten against the world, never against the
 	# bear's own capsule sitting at the pivot.
 	_arm.add_excluded_object(_body.get_rid())
@@ -43,12 +48,13 @@ func _ready() -> void:
 	_snap_to_body()
 
 
-func _physics_process(_delta: float) -> void:
+func _process(_delta: float) -> void:
 	_snap_to_body()
 
 
 func _snap_to_body() -> void:
-	global_position = _body.global_position + Vector3(0.0, PIVOT_HEIGHT, 0.0)
+	global_position = (_body.get_global_transform_interpolated().origin
+			+ Vector3(0.0, PIVOT_HEIGHT, 0.0))
 
 
 func _unhandled_input(event: InputEvent) -> void:
