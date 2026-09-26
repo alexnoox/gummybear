@@ -48,7 +48,6 @@ const BLEND_POINTS := {
 var _mesh: MeshInstance3D
 var _anim: AnimationPlayer
 var _tree: AnimationTree
-var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)
 
 var _colour_index := 0
 
@@ -125,7 +124,7 @@ func _physics_process(delta: float) -> void:
 	if is_on_floor() and Input.is_action_just_pressed("jump"):
 		velocity.y = JUMP_VELOCITY
 	elif not is_on_floor():
-		velocity.y -= _gravity * delta
+		velocity += get_gravity() * delta
 
 	# Strafe mode: the body chases the camera yaw with the same lazy lerp
 	# as the velocity below. The camera rig is top_level, so this rotation
