@@ -31,6 +31,9 @@ const SILHOUETTE_LIMITS := {
 	"walk": Vector2(1.15, 1.08),
 }
 const SILHOUETTE_IMAGE_SIZE := Vector2i(288, 162)
+## The silhouette detector keys on the default cherry colour (PALETTE[0] in
+## gummy_bear.gd). The harness never presses cycle_colour; if it ever does,
+## these thresholds stop finding the bear.
 const BEAR_RED_MIN := 0.2
 const BEAR_RED_OVER_GREEN := 1.55
 const BEAR_RED_OVER_BLUE := 1.2

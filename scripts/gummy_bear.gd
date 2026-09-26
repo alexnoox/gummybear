@@ -3,7 +3,7 @@ extends CharacterBody3D
 ## Gummy bear controller. Mouse-orbit third person in strafe mode: WASD is
 ## camera-relative and the body lazily yaws toward the orbit camera, feeding
 ## a code-built AnimationTree/BlendSpace2D (idle + 4 directional walk loops);
-## Space jumps while grounded and KEY_C cycles the gummy colour.
+## Space jumps while grounded and cycle_colour (C) cycles the gummy colour.
 
 ## Lowered from 3.0 to match the authored stride speeds measured off the
 ## exported clips (fwd 0.447 m/s, back 0.362, strafe 0.142). A residual glide
@@ -151,11 +151,8 @@ func _physics_process(delta: float) -> void:
 				Vector2(local.x, local.z) / SPEED)
 
 
-func _unhandled_key_input(event: InputEvent) -> void:
-	var key := event as InputEventKey
-	if key == null or not key.pressed or key.echo:
-		return
-	if key.keycode == KEY_C:
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("cycle_colour"):
 		_colour_index = (_colour_index + 1) % PALETTE.size()
 		_apply_colour()
 		get_viewport().set_input_as_handled()
