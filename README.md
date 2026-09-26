@@ -18,6 +18,9 @@ drives with a code-built locomotion blend tree under a mouse-orbit camera.
 | WASD  | Walk (forward / back / strafe) |
 | Space | Jump (grounded only, no double jump) |
 | C     | Cycle gummy colour (cherry, orange, lemon, lime, pineapple) |
+| Mouse | Orbit camera (bear turns to follow while walking) |
+| Wheel | Zoom |
+| Esc   | Release / recapture mouse (left click also recaptures) |
 
 ## Layout
 
