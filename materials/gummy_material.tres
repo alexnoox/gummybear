@@ -1,7 +1,13 @@
-[gd_resource type="ShaderMaterial" load_steps=2 format=3]
+[gd_resource type="ShaderMaterial" load_steps=4 format=3]
 
-[ext_resource type="Shader" path="res://shaders/gummy.gdshader" id="1_shader"]
+[ext_resource type="Shader" path="res://shaders/gummy_depth.gdshader" id="1_depth"]
+[ext_resource type="Shader" path="res://shaders/gummy.gdshader" id="2_colour"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_colour"]
+render_priority = 1
+shader = ExtResource("2_colour")
 
 [resource]
 render_priority = 0
-shader = ExtResource("1_shader")
+next_pass = SubResource("ShaderMaterial_colour")
+shader = ExtResource("1_depth")
