@@ -13,6 +13,7 @@ const SHOT_SCHEDULE := {
 	0.78: "jump_apex.png",
 	1.15: "jump_landed.png",
 	2.20: "walk.png",
+	2.70: "side.png",
 }
 ## seconds -> silhouette window sampled after the frame is drawn
 const SILHOUETTE_SCHEDULE := {
@@ -47,6 +48,12 @@ const AIR_DRIVE_END := 0.75
 const DRIVE_START := 1.6
 const DRIVE_END := 2.4
 const QUIT_AT := 3.0
+## After all world-axis checks, orbit the idle bear's camera a quarter turn:
+## the body must stay put (no turn-in-place clip exists), and side.png shows
+## the bear side-on for the shader's self-overlap check.
+const ORBIT_AT := 2.5
+const YAW_CHECK_AT := 2.9
+const MAX_IDLE_YAW := 0.05
 
 @onready var _bear: CharacterBody3D = $GummyBear
 
@@ -73,6 +80,9 @@ var _start_y_captured := false
 var _apex_y := 0.0
 var _air_drive_start_x := 0.0
 var _air_drive_end_x := 0.0
+var _orbited := false
+var _idle_yaw := 0.0
+var _idle_yaw_checked := false
 
 
 func _ready() -> void:
@@ -128,6 +138,13 @@ func _physics_process(delta: float) -> void:
 	elif _drive_pressed and not _drive_released and _elapsed >= DRIVE_END:
 		Input.action_release("move_right")
 		_drive_released = true
+
+	if not _orbited and _elapsed >= ORBIT_AT:
+		_bear.get_node("CameraRig").rotation.y = PI / 2.0
+		_orbited = true
+	if _orbited and not _idle_yaw_checked and _elapsed >= YAW_CHECK_AT:
+		_idle_yaw = absf(angle_difference(0.0, _bear.rotation.y))
+		_idle_yaw_checked = true
 
 
 func _process(_delta: float) -> void:
@@ -239,10 +256,14 @@ func _finish() -> void:
 	var air_distance := absf(_air_drive_end_x - _air_drive_start_x)
 	if air_distance < MIN_AIR_DISTANCE:
 		failures.append("airborne move_right travelled only %.3f m" % air_distance)
+	if not _idle_yaw_checked:
+		failures.append("idle yaw was never checked")
+	elif _idle_yaw > MAX_IDLE_YAW:
+		failures.append("idle bear turned %.3f rad toward the camera" % _idle_yaw)
 	for window: String in SILHOUETTE_LIMITS:
 		_validate_silhouette(window, failures)
-	print("[test_stage] jump rise=%.3f air_dx=%.3f airborne=%s landed=%s double_boost=%s" %
-			[rise, air_distance, _airborne_seen, _landed, _second_boost])
+	print("[test_stage] jump rise=%.3f air_dx=%.3f airborne=%s landed=%s double_boost=%s idle_yaw=%.3f" %
+			[rise, air_distance, _airborne_seen, _landed, _second_boost, _idle_yaw])
 	if not failures.is_empty():
 		for failure in failures:
 			push_error("[test_stage] " + failure)

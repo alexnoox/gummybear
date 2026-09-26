@@ -9,7 +9,7 @@ The deliberate, low-rate smoothing that makes the bear feel gelatinous — veloc
 _Avoid_: Damping, easing, interpolation lag
 
 **Strafe mode**:
-The locomotion model where the bear's body yaw follows the camera yaw and WASD moves relative to the camera, so the bear side-steps/back-pedals using its four directional walk clips instead of turning to face its velocity.
+The locomotion model where, while the player is moving, the bear's body yaw follows the camera yaw and WASD moves relative to the camera, so the bear side-steps/back-pedals using its four directional walk clips instead of turning to face its velocity. An idle bear does not turn when the camera orbits.
 _Avoid_: Camera-relative movement, relative controls
 
 **Orbit rig**:

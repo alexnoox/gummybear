@@ -9,3 +9,5 @@
 - Turn-to-move facing (bear yaws to face its velocity) — rejected because it would orphan 3 of the 4 authored directional walk clips, leaving only the forward clip in use.
 
 **Consequences**: The `--shots` harness has no mouse input, so it relies on the orbit rig defaulting to camera yaw 0 to reproduce today's framing (bear faces −Z, `move_right` strafes world +X). Any future code that assumes velocity is expressed in world space rather than bear-local space is a bug, not a valid reading of the old invariant.
+
+**Amendment (2026-09-26)**: The body yaw now follows the camera only while movement input is held. An idle bear turning toward the camera slid its feet, because there is no turn-in-place clip. The `--shots` harness asserts this by orbiting the idle camera a quarter turn.

@@ -126,13 +126,15 @@ func _physics_process(delta: float) -> void:
 	elif not is_on_floor():
 		velocity += get_gravity() * delta
 
-	# Strafe mode: the body chases the camera yaw with the same lazy lerp
-	# as the velocity below. The camera rig is top_level, so this rotation
-	# never feeds back into mouse look.
-	rotation.y = lerp_angle(rotation.y, _camera_rig.yaw,
-			clampf(YAW_LERP * delta, 0.0, 1.0))
-
 	var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	# Strafe mode: while the player drives, the body chases the camera yaw
+	# with the same lazy lerp as the velocity below. Idle, it holds still:
+	# there is no turn-in-place clip, so turning would slide the feet. The
+	# camera rig is top_level, so this rotation never feeds back into mouse
+	# look.
+	if input != Vector2.ZERO:
+		rotation.y = lerp_angle(rotation.y, _camera_rig.yaw,
+				clampf(YAW_LERP * delta, 0.0, 1.0))
 	# Camera-relative drive: with yaw 0 this reduces exactly to the old
 	# world-axis movement.
 	var dir3 := Vector3(input.x, 0.0, input.y).rotated(Vector3.UP, _camera_rig.yaw)
