@@ -13,5 +13,5 @@ The locomotion model where, while the player is moving, the bear's body yaw foll
 _Avoid_: Camera-relative movement, relative controls
 
 **Orbit rig**:
-The player camera — a mouse-driven third-person rig that orbits and follows the bear (captured mouse, Esc releases).
+The player camera — a mouse-driven third-person rig that orbits and follows the bear (captured mouse, Esc releases, a left click recaptures).
 _Avoid_: Chase camera, follow camera, third-person camera

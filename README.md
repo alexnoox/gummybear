@@ -33,7 +33,8 @@ assets/bear.glb     Exported character consumed by Godot
 scenes/             gummy_bear.tscn (character), test_stage.tscn (main scene)
 scripts/            gummy_bear.gd (controller), orbit_camera.gd (camera rig),
                     test_stage.gd (dev harness)
-shaders/            gummy.gdshader (translucent candy look, rim light, contact fade)
+shaders/            gummy_depth.gdshader (depth pre-pass), gummy.gdshader
+                    (translucent candy look, rim light, contact fade)
 docs/               Specs, ADRs, plans
 renders/            README hero render
 ```
@@ -43,13 +44,17 @@ renders/            README hero render
 - `scripts/gummy_bear.gd` finds the GLB's `AnimationPlayer` at runtime and
   builds an `AnimationTree` with a `BlendSpace2D` in code (idle at the origin,
   the four walk loops on the axes). Blend position is fed body-local horizontal
-  velocity (strafe mode, see docs/adr/0001-orbit-camera-strafe-mode.md); `SYNC_MODE_INDEPENDENT` keeps the phase-locked walk
-  cycles from popping on direction changes.
+  velocity (strafe mode, see docs/adr/0001-orbit-camera-strafe-mode.md);
+  `SYNC_MODE_INDEPENDENT` keeps the phase-locked walk cycles from popping on
+  direction changes.
 - Movement is a plain `CharacterBody3D`: lerped horizontal velocity (deliberate
   gummy lag), gravity, and a physics-only grounded jump — no jump animation,
   by design (see `docs/specs/2026-08-10-stable-silhouette-space-jump.md`).
-- The gummy look is a single material override
-  (`materials/gummy_material.tres` + `shaders/gummy.gdshader`) with a
+- The gummy look is two shader passes on one material
+  (`materials/gummy_material.tres`): a depth-only pre-pass
+  (`shaders/gummy_depth.gdshader`) writes the bear's nearest-surface depth,
+  then its `next_pass` (`shaders/gummy.gdshader`, `render_priority = 1` so it
+  draws after the depth pass) shades only the front-most surface, with a
   per-instance colour parameter cycled by the C key.
 
 ## Running
@@ -58,7 +63,8 @@ Open the project in Godot 4.7 and run — `scenes/test_stage.tscn` is the main
 scene.
 
 Headless evidence run (captures screenshots to `.dev/` and validates the jump
-contract):
+contract, the idle/walk silhouettes, and that an idle bear doesn't turn when
+the camera orbits):
 
 ```
 godot -- --shots

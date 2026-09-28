@@ -5,10 +5,11 @@ extends Node3D
 ## CharacterBody3D but runs top-level so the body's yaw (which chases this
 ## rig's yaw) never compounds with mouse look; every rendered frame it snaps
 ## to the bear's interpolated position, with automatic interpolation off, so
-## mouse look stays frame-rate crisp. The rig is crisp on purpose: all the gummy lag lives
-## in the body's velocity/yaw lerps. Esc toggles cursor capture (a left click also recaptures), the wheel
-## zooms the spring arm, pitch is clamped so the camera neither dives under
-## the stage nor flips over the bear.
+## mouse look stays frame-rate steady. The rig is crisp on purpose: all the
+## gummy lag lives in the body's velocity/yaw lerps. Esc toggles cursor
+## capture (a left click also recaptures), the wheel zooms the spring arm,
+## pitch is clamped so the camera neither dives under the stage nor flips
+## over the bear.
 
 ## Radians of rotation per pixel of mouse travel.
 const MOUSE_SENSITIVITY := 0.003

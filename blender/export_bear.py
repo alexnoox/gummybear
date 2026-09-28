@@ -1,8 +1,8 @@
 """Export the rigged, animated GummyBear to assets/bear.glb.
 
-Safe: does NOT delete scene objects, does NOT save over gummy-bear.blend,
-does NOT include cameras, lights, or backdrop in the GLB, and restores the live
-scene state in a finally block before saving the recovered root blend.
+Safe: does NOT delete scene objects, does NOT include cameras, lights, or
+backdrop in the GLB. Saves over gummy-bear.blend only after the live scene
+state is restored in a finally block (see end of file).
 
 Animation contract:
 - Exactly 5 actions ship in the GLB: ``idle-loop`` plus the four ``walk_*-loop``
