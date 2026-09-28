@@ -1,18 +1,21 @@
 class_name OrbitCamera
 extends Node3D
 
-## Mouse-orbit third-person rig for the gummy bear. Lives under the
+## Mouse- and right-stick-orbit third-person rig for the gummy bear. Lives under the
 ## CharacterBody3D but runs top-level so the body's yaw (which chases this
 ## rig's yaw) never compounds with mouse look; every rendered frame it snaps
 ## to the bear's interpolated position, with automatic interpolation off, so
 ## mouse look stays frame-rate steady. The rig is crisp on purpose: all the
-## gummy lag lives in the body's velocity/yaw lerps. Esc toggles cursor
+## gummy lag lives in the body's velocity/yaw lerps. The stick's up/down is
+## inverted (push up to look down); the mouse's is not. Esc toggles cursor
 ## capture (a left click also recaptures), the wheel zooms the spring arm,
 ## pitch is clamped so the camera neither dives under the stage nor flips
 ## over the bear.
 
 ## Radians of rotation per pixel of mouse travel.
 const MOUSE_SENSITIVITY := 0.003
+## Radians per second of rotation at full right-stick deflection.
+const STICK_SPEED := 3.0
 ## Pitch limits in radians (−60°..+20°).
 const PITCH_MIN := -PI / 3.0
 const PITCH_MAX := PI / 9.0
@@ -49,7 +52,14 @@ func _ready() -> void:
 	_snap_to_body()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	# Per rendered frame, like mouse look, so the stick stays crisp too. Works
+	# with the cursor free: the pad never needs mouse capture.
+	var look := Input.get_vector("look_left", "look_right", "look_up", "look_down")
+	rotation.y -= look.x * STICK_SPEED * delta
+	# Inverted: stick up (look.y < 0) lowers pitch, the opposite of mouse up.
+	_arm.rotation.x = clampf(_arm.rotation.x + look.y * STICK_SPEED * delta,
+			PITCH_MIN, PITCH_MAX)
 	_snap_to_body()
 
 

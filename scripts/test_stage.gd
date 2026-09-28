@@ -2,9 +2,10 @@ extends Node3D
 
 ## Dev harness for the gummy-bear PoC.
 ##
-## Interactive by default (WASD to walk, Space to jump, C to cycle colour).
-## Launch with `-- --shots` to exercise jump and walk through real input actions,
-## capture evidence into res://.dev/, validate the jump contract, and quit.
+## Interactive by default (WASD or left stick to walk, Space or A to jump).
+## Launch with `-- --shots` to exercise jump, walk and stick look through real
+## input actions, capture evidence into res://.dev/, validate the jump
+## contract, and quit.
 
 const SHOT_DIR := "res://.dev"
 ## seconds -> output file
@@ -32,9 +33,9 @@ const SILHOUETTE_LIMITS := {
 	"walk": Vector2(1.15, 1.08),
 }
 const SILHOUETTE_IMAGE_SIZE := Vector2i(288, 162)
-## The silhouette detector keys on the default cherry colour (PALETTE[0] in
-## gummy_bear.gd). The harness never presses cycle_colour; if it ever does,
-## these thresholds stop finding the bear.
+## The silhouette detector keys on the player's cherry colour (CHERRY in
+## gummy_bear.gd); if the player's colour changes, these thresholds stop
+## finding the bear.
 const BEAR_RED_MIN := 0.2
 const BEAR_RED_OVER_GREEN := 1.55
 const BEAR_RED_OVER_BLUE := 1.2
@@ -54,6 +55,13 @@ const QUIT_AT := 3.0
 const ORBIT_AT := 2.5
 const YAW_CHECK_AT := 2.9
 const MAX_IDLE_YAW := 0.05
+## A full move_right press must bring the bear near its 2.5 m/s top speed
+## before release (gummy lag makes it approach asymptotically).
+const MIN_DRIVE_SPEED := 2.2
+## Hold the right stick up-right for the last frames: yaw must follow the
+## mouse convention (right orbits right, yaw falls) while pitch is inverted
+## (stick up tilts the view down, arm pitch falls — the mouse raises it).
+const LOOK_AT := 2.92
 
 @onready var _bear: CharacterBody3D = $GummyBear
 
@@ -83,6 +91,9 @@ var _air_drive_end_x := 0.0
 var _orbited := false
 var _idle_yaw := 0.0
 var _idle_yaw_checked := false
+var _drive_speed := 0.0
+var _look_pressed := false
+var _look_start := Vector2.ZERO
 
 
 func _ready() -> void:
@@ -136,6 +147,7 @@ func _physics_process(delta: float) -> void:
 		Input.action_press("move_right")
 		_drive_pressed = true
 	elif _drive_pressed and not _drive_released and _elapsed >= DRIVE_END:
+		_drive_speed = Vector2(_bear.velocity.x, _bear.velocity.z).length()
 		Input.action_release("move_right")
 		_drive_released = true
 
@@ -145,6 +157,11 @@ func _physics_process(delta: float) -> void:
 	if _orbited and not _idle_yaw_checked and _elapsed >= YAW_CHECK_AT:
 		_idle_yaw = absf(angle_difference(0.0, _bear.rotation.y))
 		_idle_yaw_checked = true
+	if not _look_pressed and _elapsed >= LOOK_AT:
+		_look_start = _look_angles()
+		Input.action_press("look_right")
+		Input.action_press("look_up")
+		_look_pressed = true
 
 
 func _process(_delta: float) -> void:
@@ -172,6 +189,13 @@ func _process(_delta: float) -> void:
 		_sample_silhouette(SILHOUETTE_SCHEDULE[sample_due])
 	if _elapsed >= QUIT_AT:
 		_finish()
+
+
+## (rig yaw, arm pitch) in radians.
+func _look_angles() -> Vector2:
+	var rig: Node3D = _bear.get_node("CameraRig")
+	var arm: Node3D = rig.get_node("SpringArm3D")
+	return Vector2(rig.rotation.y, arm.rotation.x)
 
 
 func _capture(filename: String) -> void:
@@ -241,6 +265,9 @@ func _validate_silhouette(window: String, failures: Array[String]) -> void:
 func _finish() -> void:
 	Input.action_release("jump")
 	Input.action_release("move_right")
+	Input.action_release("look_right")
+	Input.action_release("look_up")
+	var look_delta := _look_angles() - _look_start
 	var rise := _apex_y - _start_y
 	var failures: Array[String] = []
 	if not _start_y_captured:
@@ -260,10 +287,21 @@ func _finish() -> void:
 		failures.append("idle yaw was never checked")
 	elif _idle_yaw > MAX_IDLE_YAW:
 		failures.append("idle bear turned %.3f rad toward the camera" % _idle_yaw)
+	if _drive_speed < MIN_DRIVE_SPEED:
+		failures.append("drive reached only %.3f m/s" % _drive_speed)
+	if not _look_pressed:
+		failures.append("stick look was never pressed")
+	else:
+		if look_delta.x >= 0.0:
+			failures.append("look_right changed yaw by %+.3f rad (want < 0)" % look_delta.x)
+		if look_delta.y >= 0.0:
+			failures.append("look_up changed pitch by %+.3f rad (want < 0, inverted)" % look_delta.y)
 	for window: String in SILHOUETTE_LIMITS:
 		_validate_silhouette(window, failures)
 	print("[test_stage] jump rise=%.3f air_dx=%.3f airborne=%s landed=%s double_boost=%s idle_yaw=%.3f" %
 			[rise, air_distance, _airborne_seen, _landed, _second_boost, _idle_yaw])
+	print("[test_stage] drive_speed=%.3f look_dyaw=%+.3f look_dpitch=%+.3f" %
+			[_drive_speed, look_delta.x, look_delta.y])
 	if not failures.is_empty():
 		for failure in failures:
 			push_error("[test_stage] " + failure)

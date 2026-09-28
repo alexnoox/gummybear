@@ -1,14 +1,19 @@
 extends CharacterBody3D
 
-## Gummy bear controller. Mouse-orbit third person in strafe mode: WASD is
-## camera-relative and the body lazily yaws toward the orbit camera, feeding
-## a code-built AnimationTree/BlendSpace2D (idle + 4 directional walk loops);
-## Space jumps while grounded and cycle_colour (C) cycles the gummy colour.
+## Gummy bear controller. Orbit-camera third person in strafe mode: WASD or
+## the left stick is camera-relative and the body lazily yaws toward the orbit
+## camera, feeding a code-built AnimationTree (a BlendSpace2D of idle + 4
+## directional walk loops, then a TimeScale); Space or A jumps while grounded.
+## The player is always cherry red.
 
-## Lowered from 3.0 to match the authored stride speeds measured off the
-## exported clips (fwd 0.447 m/s, back 0.362, strafe 0.142). A residual glide
-## remains on the strafes; accepted rather than adding a TimeScale node.
-const SPEED := 1.0
+## Top ground speed in m/s, reached at full stick (or any WASD key).
+const SPEED := 2.5
+## Ground speed at which the walk clips play at 1×. The clips' authored
+## strides are slower (fwd 0.447 m/s, back 0.362, strafe 0.142), so they
+## already glide a little here; that look was accepted. Above this speed the
+## clips speed up in proportion rather than matching the strides, which would
+## take ~5.6× playback at top speed and look frantic.
+const STRIDE_SPEED := 1.0
 ## Horizontal velocity lerp rate (1/s). Low on purpose: gummy lag.
 const ACCEL_LERP := 5.0
 ## Body yaw lerp rate (1/s) toward the camera yaw. Matches ACCEL_LERP so the
@@ -17,13 +22,7 @@ const YAW_LERP := 5.0
 ## Upward takeoff speed in metres per second.
 const JUMP_VELOCITY := 2.8
 
-const PALETTE: Array[Color] = [
-	Color(0.9, 0.08, 0.15, 0.8),  # cherry
-	Color(1.0, 0.45, 0.05, 0.8),  # orange
-	Color(1.0, 0.85, 0.1, 0.8),   # lemon
-	Color(0.15, 0.8, 0.25, 0.8),  # lime
-	Color(0.95, 0.95, 0.95, 0.75) # pineapple/clear
-]
+const CHERRY := Color(0.9, 0.08, 0.15, 0.8)
 
 const GUMMY_MATERIAL := preload("res://materials/gummy_material.tres")
 ## Preloaded rather than referenced by class_name: the global class cache
@@ -32,7 +31,7 @@ const GUMMY_MATERIAL := preload("res://materials/gummy_material.tres")
 const ORBIT_CAMERA := preload("res://scripts/orbit_camera.gd")
 
 ## BlendSpace2D layout, fed with body-local velocity (world velocity rotated
-## by −rotation.y). Clip names are bear-relative: the rig asset itself faces
+## by −rotation.y) over STRIDE_SPEED, capped at unit length. Clip names are bear-relative: the rig asset itself faces
 ## +Z, but scenes/gummy_bear.tscn yaws the `Model` node 180° about Y, so in
 ## body space −Z is the bear's forward and +X is its right. The body yaws
 ## toward the orbit camera (strafe mode), so the invariant is no longer that
@@ -48,8 +47,6 @@ const BLEND_POINTS := {
 var _mesh: MeshInstance3D
 var _anim: AnimationPlayer
 var _tree: AnimationTree
-
-var _colour_index := 0
 
 @onready var _camera_rig: ORBIT_CAMERA = $CameraRig
 
@@ -112,9 +109,16 @@ func _setup_locomotion_tree() -> void:
 		var clip := AnimationNodeAnimation.new()
 		clip.animation = anim_name
 		space.add_blend_point(clip, BLEND_POINTS[stem], -1, stem)
+	# Above STRIDE_SPEED the blend sits on the unit circle (idle weight 0), so
+	# scaling time after the blend only ever speeds up the walks.
+	var root := AnimationNodeBlendTree.new()
+	root.add_node("locomotion", space)
+	root.add_node("speed", AnimationNodeTimeScale.new())
+	root.connect_node("speed", 0, "locomotion")
+	root.connect_node("output", 0, "speed")
 	_tree = AnimationTree.new()
 	_tree.name = "LocomotionTree"
-	_tree.tree_root = space
+	_tree.tree_root = root
 	add_child(_tree)
 	_tree.anim_player = _tree.get_path_to(_anim)
 	_tree.active = true
@@ -149,17 +153,11 @@ func _physics_process(delta: float) -> void:
 		# Un-rotate into body space so the blend axes stay glued to the bear
 		# no matter where it is facing.
 		var local := velocity.rotated(Vector3.UP, -rotation.y)
-		_tree.set("parameters/blend_position",
-				Vector2(local.x, local.z) / SPEED)
-
-
-func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("cycle_colour"):
-		_colour_index = (_colour_index + 1) % PALETTE.size()
-		_apply_colour()
-		get_viewport().set_input_as_handled()
+		var stride := Vector2(local.x, local.z) / STRIDE_SPEED
+		_tree.set("parameters/locomotion/blend_position", stride.limit_length(1.0))
+		_tree.set("parameters/speed/scale", maxf(1.0, stride.length()))
 
 
 func _apply_colour() -> void:
 	if _mesh != null:
-		_mesh.set_instance_shader_parameter("gummy_color", PALETTE[_colour_index])
+		_mesh.set_instance_shader_parameter("gummy_color", CHERRY)
