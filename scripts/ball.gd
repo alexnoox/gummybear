@@ -114,7 +114,12 @@ func _pop() -> void:
 	bit.material = material
 	burst.mesh = bit
 	burst.finished.connect(burst.queue_free)
+	# Placed before it enters the tree, and held until it's there: an emitter
+	# that enters at the origin and is moved afterwards emits every burst at
+	# the origin under physics interpolation.
+	burst.emitting = false
+	burst.position = get_parent().to_local(global_position)
 	get_parent().add_child(burst)
-	burst.global_position = global_position
+	burst.reset_physics_interpolation()
 	burst.emitting = true
 	queue_free()
