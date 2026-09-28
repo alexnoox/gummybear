@@ -2,10 +2,10 @@ extends Node3D
 
 ## Dev harness for the gummy-bear PoC.
 ##
-## Interactive by default (WASD or left stick to walk, Space or A to jump).
-## Launch with `-- --shots` to exercise jump, walk and stick look through real
-## input actions, capture evidence into res://.dev/, validate the jump
-## contract, and quit.
+## Interactive by default (WASD or left stick to walk, Space or A to jump,
+## left click or right trigger to throw). Launch with `-- --shots` to exercise
+## jump, walk, stick look and a throw through real input actions, capture
+## evidence into res://.dev/, validate the contracts, and quit.
 
 const SHOT_DIR := "res://.dev"
 ## seconds -> output file
@@ -15,6 +15,8 @@ const SHOT_SCHEDULE := {
 	1.15: "jump_landed.png",
 	2.20: "walk.png",
 	2.70: "side.png",
+	3.30: "throw.png",
+	4.00: "knock.png",
 }
 ## seconds -> silhouette window sampled after the frame is drawn
 const SILHOUETTE_SCHEDULE := {
@@ -33,9 +35,10 @@ const SILHOUETTE_LIMITS := {
 	"walk": Vector2(1.15, 1.08),
 }
 const SILHOUETTE_IMAGE_SIZE := Vector2i(288, 162)
-## The silhouette detector keys on the player's cherry colour (CHERRY in
-## gummy_bear.gd); if the player's colour changes, these thresholds stop
-## finding the bear.
+## The silhouette detector keys on the player's cherry colour (the `colour`
+## default in gummy_bear.gd); if the player's colour changes, these
+## thresholds stop finding the bear. Nothing else on the stage may be red or
+## pink (the green bears, ball, marker and fence aren't).
 const BEAR_RED_MIN := 0.2
 const BEAR_RED_OVER_GREEN := 1.55
 const BEAR_RED_OVER_BLUE := 1.2
@@ -48,7 +51,7 @@ const AIR_DRIVE_START := 0.55
 const AIR_DRIVE_END := 0.75
 const DRIVE_START := 1.6
 const DRIVE_END := 2.4
-const QUIT_AT := 3.0
+const QUIT_AT := 4.8
 ## After all world-axis checks, orbit the idle bear's camera a quarter turn:
 ## the body must stay put (no turn-in-place clip exists), and side.png shows
 ## the bear side-on for the shader's self-overlap check.
@@ -58,12 +61,27 @@ const MAX_IDLE_YAW := 0.05
 ## A full move_right press must bring the bear near its 2.5 m/s top speed
 ## before release (gummy lag makes it approach asymptotically).
 const MIN_DRIVE_SPEED := 2.2
-## Hold the right stick up-right for the last frames: yaw must follow the
-## mouse convention (right orbits right, yaw falls) while pitch is inverted
-## (stick up tilts the view down, arm pitch falls — the mouse raises it).
+## Hold the right stick up-right briefly: yaw must follow the mouse
+## convention (right orbits right, yaw falls) while pitch is inverted (stick
+## up tilts the view down, arm pitch falls — the mouse raises it).
 const LOOK_AT := 2.92
+const LOOK_END := 3.0
+## Then a throw: one green bear is teleported THROW_TARGET_DISTANCE ahead
+## along the camera and the idle player presses `throw`. The bear must be
+## knocked down within KNOCK_DEADLINE, its ragdoll must stay on the 20×20 m
+## stage, the ball must not shove the player, and the idle player must have
+## turned to face the throw (ADR 0001, 2026-09-28 amendment).
+const THROW_SETUP_AT := 3.05
+const THROW_AT := 3.15
+const THROW_TARGET_DISTANCE := 3.0
+const KNOCK_DEADLINE := 1.2
+const TURN_CHECK_AT := 3.65
+const MAX_THROW_TURN_ERROR := 0.25
+const MAX_PLAYER_DRIFT := 0.05
+const STAGE_HALF_EXTENT := 10.0
+const STAGE_MIN_Y := -0.3
 
-@onready var _bear: CharacterBody3D = $GummyBear
+@onready var _bear: CharacterBody3D = $Player
 
 var _harness := false
 var _elapsed := 0.0
@@ -93,7 +111,17 @@ var _idle_yaw := 0.0
 var _idle_yaw_checked := false
 var _drive_speed := 0.0
 var _look_pressed := false
+var _look_released := false
 var _look_start := Vector2.ZERO
+var _look_delta := Vector2.ZERO
+var _throw_setup_done := false
+var _target: CharacterBody3D
+var _throw_pressed := false
+var _throw_released := false
+var _throw_yaw := 0.0
+var _player_start := Vector3.ZERO
+var _knocked_after := -1.0
+var _turn_error := -1.0
 
 
 func _ready() -> void:
@@ -162,6 +190,27 @@ func _physics_process(delta: float) -> void:
 		Input.action_press("look_right")
 		Input.action_press("look_up")
 		_look_pressed = true
+	elif _look_pressed and not _look_released and _elapsed >= LOOK_END:
+		_look_delta = _look_angles() - _look_start
+		Input.action_release("look_right")
+		Input.action_release("look_up")
+		_look_released = true
+
+	if not _throw_setup_done and _elapsed >= THROW_SETUP_AT:
+		_setup_throw_target()
+	if _target != null and not _throw_pressed and _elapsed >= THROW_AT:
+		var to_target := _target.global_position - _bear.global_position
+		_throw_yaw = atan2(-to_target.x, -to_target.z)
+		Input.action_press("throw")
+		_throw_pressed = true
+	elif _throw_pressed and not _throw_released:
+		Input.action_release("throw")
+		_throw_released = true
+	if (_throw_pressed and _knocked_after < 0.0
+			and _target.call("is_down")):
+		_knocked_after = _elapsed - THROW_AT
+	if _throw_pressed and _turn_error < 0.0 and _elapsed >= TURN_CHECK_AT:
+		_turn_error = absf(angle_difference(_throw_yaw, _bear.rotation.y))
 
 
 func _process(_delta: float) -> void:
@@ -189,6 +238,23 @@ func _process(_delta: float) -> void:
 		_sample_silhouette(SILHOUETTE_SCHEDULE[sample_due])
 	if _elapsed >= QUIT_AT:
 		_finish()
+
+
+## Puts the first green bear THROW_TARGET_DISTANCE ahead of the idle player,
+## along the camera's horizontal forward.
+func _setup_throw_target() -> void:
+	_throw_setup_done = true
+	var greens := get_tree().get_nodes_in_group("green_bears")
+	if greens.is_empty():
+		return
+	_target = greens[0]
+	var yaw: float = _look_angles().x
+	var forward := Vector3(-sin(yaw), 0.0, -cos(yaw))
+	_player_start = _bear.global_position
+	_target.global_position = (_bear.global_position
+			+ forward * THROW_TARGET_DISTANCE)
+	_target.velocity = Vector3.ZERO
+	_target.reset_physics_interpolation()
 
 
 ## (rig yaw, arm pitch) in radians.
@@ -262,12 +328,48 @@ func _validate_silhouette(window: String, failures: Array[String]) -> void:
 				[window, height_ratio, limits.y])
 
 
+func _validate_throw(failures: Array[String]) -> void:
+	if _target == null or not _target.has_method("is_down"):
+		failures.append("no green bear to throw at")
+		return
+	if not _throw_pressed:
+		failures.append("throw was never pressed")
+		return
+	if _knocked_after < 0.0:
+		failures.append("green bear was never knocked down")
+	elif _knocked_after > KNOCK_DEADLINE:
+		failures.append("green bear went down after %.2f s (want <= %.2f s)" %
+				[_knocked_after, KNOCK_DEADLINE])
+	var off_stage := 0
+	var bones: Array = _target.call("ragdoll_bones")
+	for bone: Node3D in bones:
+		var p := bone.global_position
+		if (absf(p.x) > STAGE_HALF_EXTENT or absf(p.z) > STAGE_HALF_EXTENT
+				or p.y < STAGE_MIN_Y):
+			off_stage += 1
+	if bones.is_empty():
+		failures.append("green bear has no ragdoll bones")
+	elif off_stage > 0:
+		failures.append("%d ragdoll bones left the stage" % off_stage)
+	var drift := _bear.global_position - _player_start
+	drift.y = 0.0
+	if drift.length() > MAX_PLAYER_DRIFT:
+		failures.append("player drifted %.3f m during the throw" % drift.length())
+	if _turn_error < 0.0:
+		failures.append("throw turn was never checked")
+	elif _turn_error > MAX_THROW_TURN_ERROR:
+		failures.append("idle player is %.3f rad off the throw direction" % _turn_error)
+	print("[test_stage] knocked_after=%.2f turn_error=%.3f drift=%.3f ragdoll_off_stage=%d" %
+			[_knocked_after, _turn_error, drift.length(), off_stage])
+
+
 func _finish() -> void:
 	Input.action_release("jump")
 	Input.action_release("move_right")
 	Input.action_release("look_right")
 	Input.action_release("look_up")
-	var look_delta := _look_angles() - _look_start
+	Input.action_release("throw")
+	var look_delta := _look_delta
 	var rise := _apex_y - _start_y
 	var failures: Array[String] = []
 	if not _start_y_captured:
@@ -289,13 +391,14 @@ func _finish() -> void:
 		failures.append("idle bear turned %.3f rad toward the camera" % _idle_yaw)
 	if _drive_speed < MIN_DRIVE_SPEED:
 		failures.append("drive reached only %.3f m/s" % _drive_speed)
-	if not _look_pressed:
+	if not _look_released:
 		failures.append("stick look was never pressed")
 	else:
 		if look_delta.x >= 0.0:
 			failures.append("look_right changed yaw by %+.3f rad (want < 0)" % look_delta.x)
 		if look_delta.y >= 0.0:
 			failures.append("look_up changed pitch by %+.3f rad (want < 0, inverted)" % look_delta.y)
+	_validate_throw(failures)
 	for window: String in SILHOUETTE_LIMITS:
 		_validate_silhouette(window, failures)
 	print("[test_stage] jump rise=%.3f air_dx=%.3f airborne=%s landed=%s double_boost=%s idle_yaw=%.3f" %

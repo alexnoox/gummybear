@@ -1,8 +1,9 @@
 # Gummy Bear
 
-A rigged, animated gummy bear character PoC. The mesh and 11-bone rig live in
-`gummy-bear.blend`; scripts author the walk loops and export a GLB that Godot
-drives with a code-built locomotion blend tree under a mouse-orbit camera.
+A game for a small child: you're a red gummy bear throwing yellow dodgeballs
+at green bears, who flop over in a ragdoll when hit. The mesh and 11-bone rig
+live in `gummy-bear.blend`; scripts author the walk loops and export a GLB that
+Godot drives with a code-built locomotion blend tree under a mouse-orbit camera.
 
 ![Gummy bear render](renders/final_Cam34.png)
 
@@ -17,9 +18,10 @@ drives with a code-built locomotion blend tree under a mouse-orbit camera.
 |------------------|----------|--------|
 | WASD  | Left stick | Walk (forward / back / strafe); the stick is analog, up to 2.5 m/s |
 | Space | A | Jump (grounded only, no double jump) |
+| Left click | Right trigger | Throw a ball along the camera (every 0.3 s; aim assist bends it toward the green bear under the yellow arrow) |
 | Mouse | Right stick | Orbit camera (bear turns to follow while walking); the stick's up/down is inverted |
 | Wheel | — | Zoom |
-| Esc   | — | Release / recapture mouse (left click also recaptures) |
+| Esc   | — | Release / recapture mouse (a left click also recaptures, without throwing) |
 
 ## Layout
 
@@ -29,8 +31,11 @@ blender/            Asset pipeline scripts (run inside Blender against gummy-bea
   export_bear.py      Exports assets/bear.glb (idle + 4 walk clips, nothing else)
 gummy-bear.blend    Source mesh, rig and idle action (hand-maintained)
 assets/bear.glb     Exported character consumed by Godot
-scenes/             gummy_bear.tscn (character), test_stage.tscn (main scene)
-scripts/            gummy_bear.gd (controller), orbit_camera.gd (camera rig),
+scenes/             gummy_bear.tscn (shared bear body), player_bear.tscn and
+                    green_bear.tscn (inherit it), test_stage.tscn (main scene)
+scripts/            gummy_bear.gd (shared body, ragdoll), player_bear.gd (input,
+                    throw, aim assist), green_bear.gd (wander/flee),
+                    orbit_camera.gd (camera rig), ball.gd, candy_fence.gd,
                     test_stage.gd (dev harness)
 shaders/            gummy_depth.gdshader (depth pre-pass), gummy.gdshader
                     (translucent candy look, rim light, contact fade)
@@ -50,21 +55,35 @@ renders/            README hero render
 - Movement is a plain `CharacterBody3D`: lerped horizontal velocity (deliberate
   gummy lag), gravity, and a physics-only grounded jump — no jump animation,
   by design (see `docs/specs/2026-08-10-stable-silhouette-space-jump.md`).
+- `gummy_bear.gd` is the body every bear shares; subclasses only say where to
+  go (`_steer()`). `player_bear.gd` reads input and throws; `green_bear.gd`
+  wanders, flees the player within 4 m, and faces where it's heading.
+- A throw spawns `ball.gd` (a bouncy `RigidBody3D` on its own physics layer,
+  passing through the player). Aim assist lobs it at the best-aligned
+  standing green bear, leading its velocity. Any touch knocks a bear down;
+  the ball pops after 3 touches.
+- A knock starts a ragdoll built in code (`build_ragdoll()`): a
+  `PhysicalBoneSimulator3D` whose bones track the animation inertly until
+  the hit, then simulate. Jolt needs explicit collision exceptions between a
+  bear's own bones, and a `ScaleFix` modifier undoes the rig's 0.333 scale
+  leaking into the simulated bones.
 - The gummy look is two shader passes on one material
   (`materials/gummy_material.tres`): a depth-only pre-pass
   (`shaders/gummy_depth.gdshader`) writes the bear's nearest-surface depth,
   then its `next_pass` (`shaders/gummy.gdshader`, `render_priority = 1` so it
   draws after the depth pass) shades only the front-most surface, with a
-  per-instance colour parameter (the player is cherry red).
+  per-instance colour parameter (the player is cherry red, green bears lime).
 
 ## Running
 
 Open the project in Godot 4.7 and run — `scenes/test_stage.tscn` is the main
 scene.
 
-Headless evidence run (captures screenshots to `.dev/` and validates the jump
-contract, the idle/walk silhouettes, top speed, stick look direction, and that
-an idle bear doesn't turn when the camera orbits):
+Evidence run (opens a window — don't touch the mouse while it runs; captures
+screenshots to `.dev/` and validates the jump contract, the idle/walk
+silhouettes, top speed, stick look direction, that an idle bear doesn't turn
+when the camera orbits, and that a throw knocks a green bear down, turns the
+idle player to face it, and keeps the ragdoll on the stage):
 
 ```
 godot -- --shots

@@ -1,0 +1,19 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/gummy_bear.tscn" id="1_base"]
+[ext_resource type="Script" path="res://scripts/player_bear.gd" id="2_script"]
+[ext_resource type="Script" path="res://scripts/orbit_camera.gd" id="3_orbit"]
+
+[node name="PlayerBear" instance=ExtResource("1_base")]
+script = ExtResource("2_script")
+
+[node name="CameraRig" type="Node3D" parent="."]
+script = ExtResource("3_orbit")
+
+[node name="SpringArm3D" type="SpringArm3D" parent="CameraRig"]
+transform = Transform3D(1, 0, 0, 0, 0.965926, 0.258819, 0, -0.258819, 0.965926, 0, 0, 0)
+spring_length = 2.6
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig/SpringArm3D"]
+fov = 50.0
+current = true

@@ -1,13 +1,13 @@
 extends CharacterBody3D
 
-## Gummy bear controller. Orbit-camera third person in strafe mode: WASD or
-## the left stick is camera-relative and the body lazily yaws toward the orbit
-## camera, feeding a code-built AnimationTree (a BlendSpace2D of idle + 4
-## directional walk loops, then a TimeScale); Space or A jumps while grounded.
-## The player is always cherry red.
+## Shared gummy bear body, used by the red player bear and the green bears.
+## Subclasses decide where to go through `_steer()` (a horizontal target
+## velocity; they turn the body with `turn_toward()`); this base does gravity,
+## the gummy-lag velocity lerp, `move_and_slide()`, and feeds a code-built
+## AnimationTree (a BlendSpace2D of idle + 4 directional walk loops, then a
+## TimeScale) with body-local velocity. `knock()` flops the bear into a
+## code-built ragdoll that stays down.
 
-## Top ground speed in m/s, reached at full stick (or any WASD key).
-const SPEED := 2.5
 ## Ground speed at which the walk clips play at 1×. The clips' authored
 ## strides are slower (fwd 0.447 m/s, back 0.362, strafe 0.142), so they
 ## already glide a little here; that look was accepted. Above this speed the
@@ -16,26 +16,43 @@ const SPEED := 2.5
 const STRIDE_SPEED := 1.0
 ## Horizontal velocity lerp rate (1/s). Low on purpose: gummy lag.
 const ACCEL_LERP := 5.0
-## Body yaw lerp rate (1/s) toward the camera yaw. Matches ACCEL_LERP so the
-## turn has the same gummy lag character as the walk.
+## Body yaw lerp rate (1/s). Matches ACCEL_LERP so a turn has the same gummy
+## lag character as the walk.
 const YAW_LERP := 5.0
-## Upward takeoff speed in metres per second.
-const JUMP_VELOCITY := 2.8
 
-const CHERRY := Color(0.9, 0.08, 0.15, 0.8)
+## Physics layer bits (named in project.godot).
+const LAYER_WORLD := 1
+const LAYER_BEARS := 2
+const LAYER_RAGDOLLS := 4
+const LAYER_BALLS := 8
+
+## Knock: the whole ragdoll is launched at this speed along the ball's
+## horizontal path, plus an upward pop, and the head gets an extra shove so
+## the bear topples rather than sliding upright.
+const KNOCK_SPEED := 2.5
+const KNOCK_POP := 2.0
+const KNOCK_TOPPLE := 1.5
+
+## Ragdoll bone shapes in metres: [radius, capsule length] per bone, the
+## capsule running up the bone's +Y from its head; length 0 means a sphere.
+const RAGDOLL_SHAPES := {
+	"root": [0.12, 0.10], "body": [0.18, 0.30], "head": [0.17, 0.0],
+	"arm.L": [0.05, 0.18], "arm.R": [0.05, 0.18],
+	"leg.L": [0.07, 0.20], "leg.R": [0.07, 0.20],
+	"foot.L": [0.06, 0.0], "foot.R": [0.06, 0.0],
+	"ear.L": [0.04, 0.0], "ear.R": [0.04, 0.0],
+}
+const RAGDOLL_CONE_BONES := ["body", "head", "arm.L", "arm.R", "leg.L", "leg.R"]
 
 const GUMMY_MATERIAL := preload("res://materials/gummy_material.tres")
-## Preloaded rather than referenced by class_name: the global class cache
-## only refreshes on editor import, so a bare `OrbitCamera` annotation
-## breaks headless/CLI runs (e.g. the --shots harness) after a fresh edit.
-const ORBIT_CAMERA := preload("res://scripts/orbit_camera.gd")
 
 ## BlendSpace2D layout, fed with body-local velocity (world velocity rotated
-## by −rotation.y) over STRIDE_SPEED, capped at unit length. Clip names are bear-relative: the rig asset itself faces
-## +Z, but scenes/gummy_bear.tscn yaws the `Model` node 180° about Y, so in
-## body space −Z is the bear's forward and +X is its right. The body yaws
-## toward the orbit camera (strafe mode), so the invariant is no longer that
-## the body never rotates — it's that the blend is fed body-local velocity.
+## by −rotation.y) over STRIDE_SPEED, capped at unit length. Clip names are
+## bear-relative: the rig asset itself faces +Z, but scenes/gummy_bear.tscn
+## yaws the `Model` node 180° about Y, so in body space −Z is the bear's
+## forward and +X is its right. The body yaws (strafe mode for the player,
+## facing its velocity for green bears), so the invariant is that the blend is
+## fed body-local velocity.
 const BLEND_POINTS := {
 	"idle": Vector2.ZERO,
 	"walk_fwd": Vector2(0.0, -1.0),
@@ -44,24 +61,52 @@ const BLEND_POINTS := {
 	"walk_right": Vector2(1.0, 0.0),
 }
 
+
+## The GummyRig's 0.333 scale leaks into the simulated bone bases, so a
+## ragdolled bear would render 3× too big. Runs after the simulator and
+## strips the scale from every bone's global pose while simulating.
+class ScaleFix extends SkeletonModifier3D:
+	var simulator: PhysicalBoneSimulator3D
+
+	func _process_modification_with_delta(_delta: float) -> void:
+		if simulator == null or not simulator.is_simulating_physics():
+			return
+		var skeleton := get_skeleton()
+		var poses: Array[Transform3D] = []
+		for i in skeleton.get_bone_count():
+			poses.append(skeleton.get_bone_global_pose(i))
+		for i in skeleton.get_bone_count():
+			skeleton.set_bone_global_pose(i,
+					Transform3D(poses[i].basis.orthonormalized(), poses[i].origin))
+
+
+## Candy colour, fed to the gummy shader as a per-instance parameter.
+@export var colour := Color(0.9, 0.08, 0.15, 0.8)
+
 var _mesh: MeshInstance3D
 var _anim: AnimationPlayer
 var _tree: AnimationTree
-
-@onready var _camera_rig: ORBIT_CAMERA = $CameraRig
+var _skeleton: Skeleton3D
+var _ragdoll: PhysicalBoneSimulator3D
+var _down := false
 
 
 func _ready() -> void:
 	# owned = false: nodes inside the instanced .glb are owned by its own root.
-	var meshes := find_children("*", "MeshInstance3D", true, false)
+	var model := $Model
+	var meshes := model.find_children("*", "MeshInstance3D", true, false)
 	if meshes.is_empty():
 		push_error("GummyBear: no MeshInstance3D found under Model")
 	else:
 		_mesh = meshes[0]
 		_mesh.material_override = GUMMY_MATERIAL
-		_apply_colour()
+		_mesh.set_instance_shader_parameter("gummy_color", colour)
 
-	var players := find_children("*", "AnimationPlayer", true, false)
+	var skeletons := model.find_children("*", "Skeleton3D", true, false)
+	if not skeletons.is_empty():
+		_skeleton = skeletons[0]
+
+	var players := model.find_children("*", "AnimationPlayer", true, false)
 	if players.is_empty():
 		push_warning("GummyBear: no AnimationPlayer found under Model")
 	else:
@@ -124,25 +169,29 @@ func _setup_locomotion_tree() -> void:
 	_tree.active = true
 
 
-func _physics_process(delta: float) -> void:
-	if is_on_floor() and Input.is_action_just_pressed("jump"):
-		velocity.y = JUMP_VELOCITY
-	elif not is_on_floor():
-		velocity += get_gravity() * delta
+## Virtual: the horizontal velocity (m/s) the bear wants this tick. Turn the
+## body from here with `turn_toward()`; set `velocity.y` here to jump.
+func _steer(_delta: float) -> Vector3:
+	return Vector3.ZERO
 
-	var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
-	# Strafe mode: while the player drives, the body chases the camera yaw
-	# with the same lazy lerp as the velocity below. Idle, it holds still:
-	# there is no turn-in-place clip, so turning would slide the feet. The
-	# camera rig is top_level, so this rotation never feeds back into mouse
-	# look.
-	if input != Vector2.ZERO:
-		rotation.y = lerp_angle(rotation.y, _camera_rig.yaw,
-				clampf(YAW_LERP * delta, 0.0, 1.0))
-	# Camera-relative drive: with yaw 0 this reduces exactly to the old
-	# world-axis movement.
-	var dir3 := Vector3(input.x, 0.0, input.y).rotated(Vector3.UP, _camera_rig.yaw)
-	var target := dir3 * SPEED
+
+## Lerps the body yaw toward `yaw` at `rate` (1/s), gummy style.
+func turn_toward(yaw: float, rate: float, delta: float) -> void:
+	rotation.y = lerp_angle(rotation.y, yaw, clampf(rate * delta, 0.0, 1.0))
+
+
+## The body yaw that faces a horizontal world direction (forward is −Z).
+static func yaw_of(direction: Vector3) -> float:
+	return atan2(-direction.x, -direction.z)
+
+
+func _physics_process(delta: float) -> void:
+	if _down:
+		# The ragdoll carries the skeleton now; the body just stays put.
+		return
+	if not is_on_floor():
+		velocity += get_gravity() * delta
+	var target := _steer(delta)
 	var blend := clampf(ACCEL_LERP * delta, 0.0, 1.0)
 	velocity.x = lerpf(velocity.x, target.x, blend)
 	velocity.z = lerpf(velocity.z, target.z, blend)
@@ -158,6 +207,94 @@ func _physics_process(delta: float) -> void:
 		_tree.set("parameters/speed/scale", maxf(1.0, stride.length()))
 
 
-func _apply_colour() -> void:
-	if _mesh != null:
-		_mesh.set_instance_shader_parameter("gummy_color", CHERRY)
+func is_down() -> bool:
+	return _down
+
+
+## The ragdoll's PhysicalBone3D nodes (empty if none was built).
+func ragdoll_bones() -> Array:
+	if _ragdoll == null:
+		return []
+	return _ragdoll.get_children().filter(func(n): return n is PhysicalBone3D)
+
+
+## Builds an inert ragdoll: the simulator stays active so its kinematic bones
+## track the animated pose (and a knock starts from the right place), but
+## they sit on no layer and mask nothing until `knock()`, because active
+## kinematic bones would otherwise shove this bear's own CharacterBody3D.
+func build_ragdoll() -> void:
+	if _skeleton == null or _ragdoll != null:
+		return
+	_ragdoll = PhysicalBoneSimulator3D.new()
+	_ragdoll.name = "Ragdoll"
+	_skeleton.add_child(_ragdoll)
+	var bones: Array[PhysicalBone3D] = []
+	for i in _skeleton.get_bone_count():
+		var bone_name := _skeleton.get_bone_name(i)
+		if not RAGDOLL_SHAPES.has(bone_name):
+			continue
+		var bone := PhysicalBone3D.new()
+		bone.name = "PB_" + bone_name
+		# bone_name must be set before the bone enters the tree.
+		bone.bone_name = bone_name
+		bone.mass = 1.0
+		bone.joint_type = (PhysicalBone3D.JOINT_TYPE_CONE
+				if bone_name in RAGDOLL_CONE_BONES
+				else PhysicalBone3D.JOINT_TYPE_PIN)
+		bone.collision_layer = 0
+		bone.collision_mask = 0
+		var radius: float = RAGDOLL_SHAPES[bone_name][0]
+		var length: float = RAGDOLL_SHAPES[bone_name][1]
+		var shape := CollisionShape3D.new()
+		if length > 0.0:
+			var capsule := CapsuleShape3D.new()
+			capsule.radius = radius
+			capsule.height = maxf(length, 2.0 * radius)
+			shape.shape = capsule
+			# Offset the shape in metres (body_offset would pick up the
+			# rig's 0.333 scale).
+			shape.position = Vector3(0.0, capsule.height * 0.5, 0.0)
+		else:
+			var sphere := SphereShape3D.new()
+			sphere.radius = radius
+			shape.shape = sphere
+		bone.add_child(shape)
+		_ragdoll.add_child(bone)
+		bones.append(bone)
+	# Jolt joints don't stop the two bones they join from colliding, so the
+	# bones of one bear ignore each other (and the bear's own capsule).
+	for a in bones.size():
+		bones[a].add_collision_exception_with(self)
+		for b in range(a + 1, bones.size()):
+			bones[a].add_collision_exception_with(bones[b])
+	var fix := ScaleFix.new()
+	fix.name = "RagdollScaleFix"
+	fix.simulator = _ragdoll
+	_skeleton.add_child(fix)
+
+
+## Flops the bear: shoved along `hit_velocity`'s horizontal direction with an
+## upward pop, then limp. It stays down (the stand-up reset is cycle 2b).
+func knock(hit_velocity: Vector3) -> void:
+	if _down or _ragdoll == null:
+		return
+	_down = true
+	velocity = Vector3.ZERO
+	collision_layer = 0
+	$CollisionShape3D.set_deferred("disabled", true)
+	# Godot #101823: with physics interpolation on, a ragdolled skeleton's
+	# mesh drifts away from its bones. Only while down: walking needs it.
+	_skeleton.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	var push := Vector3(hit_velocity.x, 0.0, hit_velocity.z)
+	push = push.normalized() if push.length() > 0.01 else global_basis.z
+	var launch := push * KNOCK_SPEED + Vector3.UP * KNOCK_POP
+	for bone: PhysicalBone3D in ragdoll_bones():
+		bone.collision_layer = LAYER_RAGDOLLS
+		bone.collision_mask = LAYER_WORLD | LAYER_RAGDOLLS
+	_ragdoll.physical_bones_start_simulation()
+	# Impulses land in the same frame the simulation starts.
+	for bone: PhysicalBone3D in ragdoll_bones():
+		var shove := launch
+		if bone.bone_name == "head":
+			shove += push * KNOCK_TOPPLE
+		bone.apply_central_impulse(shove * bone.mass)

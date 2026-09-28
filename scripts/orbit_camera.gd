@@ -8,7 +8,7 @@ extends Node3D
 ## mouse look stays frame-rate steady. The rig is crisp on purpose: all the
 ## gummy lag lives in the body's velocity/yaw lerps. The stick's up/down is
 ## inverted (push up to look down); the mouse's is not. Esc toggles cursor
-## capture (a left click also recaptures), the wheel zooms the spring arm,
+## capture (a left click recaptures without throwing), the wheel zooms the spring arm,
 ## pitch is clamped so the camera neither dives under the stage nor flips
 ## over the bear.
 
@@ -78,10 +78,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		# Clicking back into the game resumes mouse look, like Esc does.
+		# That click only recaptures: releasing `throw` (which the click has
+		# already pressed) keeps the player from throwing on it.
 		var click := event as InputEventMouseButton
 		if (click != null and click.pressed
 				and click.button_index == MOUSE_BUTTON_LEFT):
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+			Input.action_release("throw")
 			get_viewport().set_input_as_handled()
 		return
 

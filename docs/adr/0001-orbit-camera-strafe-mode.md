@@ -11,3 +11,5 @@
 **Consequences**: The `--shots` harness has no mouse input, so it relies on the orbit rig defaulting to camera yaw 0 to reproduce today's framing (bear faces −Z, `move_right` strafes world +X). Any future code that assumes velocity is expressed in world space rather than bear-local space is a bug, not a valid reading of the old invariant.
 
 **Amendment (2026-09-26)**: The body yaw now follows the camera only while movement input is held. An idle bear turning toward the camera slid its feet, because there is no turn-in-place clip. The `--shots` harness asserts this by orbiting the idle camera a quarter turn.
+
+**Amendment (2026-09-28)**: An idle bear now turns, quickly, to face a throw (yaw lerp 15/s for 0.4 s). The ball leaves along the camera, so a bear throwing sideways or backwards looked wrong, and the kid playtesters need to see which way they threw. The brief foot slide this causes was accepted. An idle bear still doesn't turn when only the camera orbits. The `--shots` harness asserts both.
