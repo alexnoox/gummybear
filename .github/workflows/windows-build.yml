@@ -1,0 +1,69 @@
+# Builds the Windows game on every push to main and publishes it as the
+# rolling "windows-latest" release, which the launcher on the Windows PC
+# (tools/windows/) downloads. Run it by hand from the Actions tab too.
+name: Windows build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-build
+  cancel-in-progress: true
+
+env:
+  # The project has no C#, so the standard (non-.NET) Godot exports it.
+  GODOT_RELEASE: "4.7-stable"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Godot and export templates
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_RELEASE }}
+
+      - name: Download Godot and export templates
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          base="https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}"
+          templates="$HOME/.local/share/godot/export_templates/${GODOT_RELEASE/-/.}"
+          mkdir -p ~/godot "$templates"
+          curl -fsSL -o /tmp/godot.zip "${base}/Godot_v${GODOT_RELEASE}_linux.x86_64.zip"
+          unzip -q /tmp/godot.zip -d ~/godot
+          mv ~/godot/Godot_v${GODOT_RELEASE}_linux.x86_64 ~/godot/godot
+          curl -fsSL -o /tmp/templates.tpz "${base}/Godot_v${GODOT_RELEASE}_export_templates.tpz"
+          unzip -q /tmp/templates.tpz -d /tmp/templates
+          mv /tmp/templates/templates/* "$templates/"
+
+      - name: Import the project
+        # A fresh checkout has no .godot/ import cache; the export needs it.
+        run: ~/godot/godot --headless --path . --import
+
+      - name: Export GummyBear.exe
+        run: |
+          mkdir -p build/windows
+          ~/godot/godot --headless --path . --export-release "Windows Desktop" build/windows/GummyBear.exe
+          test -s build/windows/GummyBear.exe
+          ls -lh build/windows
+
+      - name: Publish the windows-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete windows-latest --yes --cleanup-tag || true
+          gh release create windows-latest build/windows/GummyBear.exe \
+            --target "$GITHUB_SHA" \
+            --title "Gummy Bear for Windows (latest)" \
+            --notes "Built from ${GITHUB_SHA::7}: $(git log -1 --pretty=%s). The PC's Gummy Bear shortcut downloads this automatically."

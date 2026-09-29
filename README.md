@@ -100,23 +100,30 @@ scene. F11 or Alt+Enter toggles full screen.
 
 ### On the Windows PC by the TV
 
-`export_presets.cfg` has a **Windows Desktop** preset that builds one
-self-contained `build/windows/GummyBear.exe` (the game data is embedded).
-Exported builds start full screen.
+Automatic. Every push to `main` runs `.github/workflows/windows-build.yml`
+on GitHub Actions: it exports one self-contained `GummyBear.exe` (the
+**Windows Desktop** preset in `export_presets.cfg`; exported builds start
+full screen) and publishes it as the rolling `windows-latest` release.
 
-1. Once per Godot version, on the Mac: **Editor → Manage Export Templates →
-   Download and Install** (the .NET editor needs the .NET templates it
-   offers).
-2. **Project → Export → Windows Desktop → Export Project** (or headless:
-   `godot --headless --path . --export-release "Windows Desktop" build/windows/GummyBear.exe`).
-3. Copy `GummyBear.exe` to the PC (USB stick or shared folder) and
-   double-click it. The first time, Windows SmartScreen may say it's
-   unrecognised: **More info → Run anyway**.
-4. Plug the Xbox pad into the PC (or pair it over Bluetooth). To record
-   sounds there, the PC needs a microphone, and Windows' **Settings →
-   Privacy → Microphone → Let desktop apps access your microphone** must be
-   on. Recordings and settings live on each computer
-   (`%APPDATA%\Godot\app_userdata\Gummy Bear` on Windows).
+On the PC, once, paste this into PowerShell:
+
+    irm https://raw.githubusercontent.com/alexnoox/gummybear/main/tools/windows/Install-GummyBear.ps1 | iex
+
+It installs `tools/windows/Play-GummyBear.ps1` into
+`%LOCALAPPDATA%\GummyBear` and puts a **Gummy Bear** shortcut on the
+desktop. The shortcut downloads the newest build if it has changed (and
+plays the copy it has if the PC is offline), then starts the game.
+
+Plug the Xbox pad into the PC (or pair it over Bluetooth). To record sounds
+there, the PC needs a microphone, and Windows' **Settings → Privacy →
+Microphone → Let desktop apps access your microphone** must be on.
+Recordings and settings live on each computer
+(`%APPDATA%\Godot\app_userdata\Gummy Bear` on Windows).
+
+To build by hand instead: install the export templates once (**Editor →
+Manage Export Templates → Download and Install**), then **Project → Export →
+Windows Desktop → Export Project**, and copy `build/windows/GummyBear.exe`
+over.
 
 Evidence run (opens a window; captures
 screenshots to `.dev/` and validates the jump contract, the idle/walk
