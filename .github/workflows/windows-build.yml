@@ -47,14 +47,21 @@ jobs:
           unzip -q /tmp/templates.tpz -d /tmp/templates
           mv /tmp/templates/templates/* "$templates/"
 
+      # Godot exits 0 even when an import or export fails (the first build
+      # shipped without the bear model that way), so any ERROR line in its
+      # log fails the build instead.
       - name: Import the project
         # A fresh checkout has no .godot/ import cache; the export needs it.
-        run: ~/godot/godot --headless --path . --import
+        run: |
+          ~/godot/godot --headless --path . --import 2>&1 | tee import.log
+          ! grep -n "ERROR" import.log
 
       - name: Export GummyBear.exe
         run: |
           mkdir -p build/windows
-          ~/godot/godot --headless --path . --export-release "Windows Desktop" build/windows/GummyBear.exe
+          ~/godot/godot --headless --path . --export-release "Windows Desktop" build/windows/GummyBear.exe 2>&1 | tee export.log
+          ! grep -n "ERROR" export.log
+          grep -q "Storing File: res://.godot/imported/bear.glb-" export.log
           test -s build/windows/GummyBear.exe
           ls -lh build/windows
 
