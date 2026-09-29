@@ -26,6 +26,11 @@ const ZOOM_STEP := 0.25
 ## Orbit pivot sits at the bear's chest rather than its feet, so pitching
 ## circles the body instead of the ground plane.
 const PIVOT_HEIGHT := 0.6
+## The win's fireworks view: a gentle upward tilt (about 6°), reached over
+## SKY_TILT_TIME s. Any steeper and the arm drops the camera to the ground
+## right behind the bear, which then hides the sky.
+const SKY_PITCH := 0.1
+const SKY_TILT_TIME := 1.2
 
 ## World-space camera yaw in radians; the bear steers toward this.
 var yaw: float:
@@ -61,6 +66,13 @@ func _process(delta: float) -> void:
 	_arm.rotation.x = clampf(_arm.rotation.x + look.y * STICK_SPEED * delta,
 			PITCH_MIN, PITCH_MAX)
 	_snap_to_body()
+
+
+## Tilts the view up toward the sky for the win's fireworks. The stick and
+## mouse still work afterwards.
+func look_to_sky() -> void:
+	create_tween().tween_property(_arm, "rotation:x", SKY_PITCH, SKY_TILT_TIME) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 
 func _snap_to_body() -> void:

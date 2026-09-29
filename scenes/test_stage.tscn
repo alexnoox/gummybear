@@ -1,9 +1,10 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://scripts/test_stage.gd" id="1_script"]
 [ext_resource type="PackedScene" path="res://scenes/player_bear.tscn" id="2_bear"]
 [ext_resource type="PackedScene" path="res://scenes/green_bear.tscn" id="3_green"]
 [ext_resource type="Script" path="res://scripts/candy_fence.gd" id="4_fence"]
+[ext_resource type="Script" path="res://scripts/round.gd" id="5_round"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_ground"]
 size = Vector3(20, 0.1, 20)
@@ -70,3 +71,6 @@ wander_seed = 4
 [node name="GreenBear5" parent="." instance=ExtResource("3_green")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -8)
 wander_seed = 5
+
+[node name="Round" type="Node" parent="."]
+script = ExtResource("5_round")

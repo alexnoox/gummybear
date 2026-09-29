@@ -17,6 +17,8 @@ const SHOT_SCHEDULE := {
 	2.70: "side.png",
 	3.30: "throw.png",
 	4.00: "knock.png",
+	6.60: "fireworks.png",
+	9.40: "restart.png",
 }
 ## seconds -> silhouette window sampled after the frame is drawn
 const SILHOUETTE_SCHEDULE := {
@@ -51,7 +53,7 @@ const AIR_DRIVE_START := 0.55
 const AIR_DRIVE_END := 0.75
 const DRIVE_START := 1.6
 const DRIVE_END := 2.4
-const QUIT_AT := 4.8
+const QUIT_AT := 9.6
 ## After all world-axis checks, orbit the idle bear's camera a quarter turn:
 ## the body must stay put (no turn-in-place clip exists), and side.png shows
 ## the bear side-on for the shader's self-overlap check.
@@ -80,6 +82,12 @@ const MAX_THROW_TURN_ERROR := 0.25
 const MAX_PLAYER_DRIFT := 0.05
 const STAGE_HALF_EXTENT := 10.0
 const STAGE_MIN_Y := -0.3
+## Then the win: the harness knocks the remaining green bears down itself.
+## The round must be won at once, fireworks must go up, and the restart
+## button must be showing, focused (so A presses it) and clickable (mouse
+## free) by the end.
+const WIN_AT := 4.6
+const MAX_WIN_DELAY := 0.2
 
 @onready var _bear: CharacterBody3D = $Player
 
@@ -122,6 +130,8 @@ var _throw_yaw := 0.0
 var _player_start := Vector3.ZERO
 var _knocked_after := -1.0
 var _turn_error := -1.0
+var _win_forced := false
+var _won_after := -1.0
 
 
 func _ready() -> void:
@@ -135,6 +145,15 @@ func _ready() -> void:
 	_silhouette_pending.sort()
 	for window: String in SILHOUETTE_LIMITS:
 		_silhouette_sizes[window] = []
+
+
+## The evidence run drives everything through actions; a real mouse
+## moving over the window (the cursor is captured) would orbit the camera
+## and wreck the silhouette and look checks, so it's swallowed here, before
+## the orbit rig's _unhandled_input sees it.
+func _input(event: InputEvent) -> void:
+	if _harness and event is InputEventMouse:
+		get_viewport().set_input_as_handled()
 
 
 func _physics_process(delta: float) -> void:
@@ -211,6 +230,14 @@ func _physics_process(delta: float) -> void:
 		_knocked_after = _elapsed - THROW_AT
 	if _throw_pressed and _turn_error < 0.0 and _elapsed >= TURN_CHECK_AT:
 		_turn_error = absf(angle_difference(_throw_yaw, _bear.rotation.y))
+
+	if not _win_forced and _elapsed >= WIN_AT:
+		for green: Node in get_tree().get_nodes_in_group("green_bears"):
+			green.call("knock", Vector3(0.0, 0.0, -1.0))
+		_win_forced = true
+	if (_win_forced and _won_after < 0.0 and $Round.has_method("is_won")
+			and $Round.call("is_won")):
+		_won_after = _elapsed - WIN_AT
 
 
 func _process(_delta: float) -> void:
@@ -363,6 +390,29 @@ func _validate_throw(failures: Array[String]) -> void:
 			[_knocked_after, _turn_error, drift.length(), off_stage])
 
 
+func _validate_win(failures: Array[String]) -> void:
+	# A failed call doesn't stop GDScript, it just yields null, so a broken
+	# Round script must fail here rather than pass by accident.
+	for method in ["is_won", "rockets_launched", "restart_ready"]:
+		if not $Round.has_method(method):
+			failures.append("Round has no %s() (did round.gd fail to load?)" % method)
+			return
+	var rockets: int = $Round.call("rockets_launched")
+	var restart_ready: bool = $Round.call("restart_ready")
+	if _won_after < 0.0:
+		failures.append("round was never won with every green bear down")
+	elif _won_after > MAX_WIN_DELAY:
+		failures.append("round was won %.2f s after the last knock" % _won_after)
+	if rockets == 0:
+		failures.append("no fireworks went up")
+	if not restart_ready:
+		failures.append("restart button is not showing and focused")
+	if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		failures.append("mouse is still captured, so the restart button can't be clicked")
+	print("[test_stage] won_after=%.2f rockets=%d restart_ready=%s" %
+			[_won_after, rockets, restart_ready])
+
+
 func _finish() -> void:
 	Input.action_release("jump")
 	Input.action_release("move_right")
@@ -399,6 +449,7 @@ func _finish() -> void:
 		if look_delta.y >= 0.0:
 			failures.append("look_up changed pitch by %+.3f rad (want < 0, inverted)" % look_delta.y)
 	_validate_throw(failures)
+	_validate_win(failures)
 	for window: String in SILHOUETTE_LIMITS:
 		_validate_silhouette(window, failures)
 	print("[test_stage] jump rise=%.3f air_dx=%.3f airborne=%s landed=%s double_boost=%s idle_yaw=%.3f" %

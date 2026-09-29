@@ -103,6 +103,11 @@ func _process(_delta: float) -> void:
 		_marker.rotation.y = time * MARKER_SPIN
 
 
+## The round is won: look up at the fireworks.
+func celebrate() -> void:
+	_camera_rig.look_to_sky()
+
+
 ## The camera's horizontal forward.
 func _camera_forward() -> Vector3:
 	var yaw := _camera_rig.yaw

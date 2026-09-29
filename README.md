@@ -22,6 +22,7 @@ Godot drives with a code-built locomotion blend tree under a mouse-orbit camera.
 | Mouse | Right stick | Orbit camera (bear turns to follow while walking); the stick's up/down is inverted |
 | Wheel | — | Zoom |
 | Esc   | — | Release / recapture mouse (a left click also recaptures, without throwing) |
+| Enter / Space / click | A | Restart, once every green bear is down and the round button shows |
 
 ## Layout
 
@@ -36,6 +37,7 @@ scenes/             gummy_bear.tscn (shared bear body), player_bear.tscn and
 scripts/            gummy_bear.gd (shared body, ragdoll), player_bear.gd (input,
                     throw, aim assist), green_bear.gd (wander/flee),
                     orbit_camera.gd (camera rig), ball.gd, candy_fence.gd,
+                    round.gd (win, restart), fireworks.gd, restart_button.gd,
                     test_stage.gd (dev harness)
 shaders/            gummy_depth.gdshader (depth pre-pass), gummy.gdshader
                     (translucent candy look, rim light, contact fade)
@@ -67,6 +69,10 @@ renders/            README hero render
   the hit, then simulate. Jolt needs explicit collision exceptions between a
   bear's own bones, and a `ScaleFix` modifier undoes the rig's 0.333 scale
   leaking into the simulated bones.
+- `round.gd` watches the green bears. When the last one goes down, the
+  camera tilts up, `fireworks.gd` launches rockets either side of the view,
+  and `restart_button.gd` pops up a word-free round button (a drawn ↻) that
+  reloads the stage.
 - The gummy look is two shader passes on one material
   (`materials/gummy_material.tres`): a depth-only pre-pass
   (`shaders/gummy_depth.gdshader`) writes the bear's nearest-surface depth,
@@ -79,11 +85,13 @@ renders/            README hero render
 Open the project in Godot 4.7 and run — `scenes/test_stage.tscn` is the main
 scene.
 
-Evidence run (opens a window — don't touch the mouse while it runs; captures
+Evidence run (opens a window; captures
 screenshots to `.dev/` and validates the jump contract, the idle/walk
 silhouettes, top speed, stick look direction, that an idle bear doesn't turn
-when the camera orbits, and that a throw knocks a green bear down, turns the
-idle player to face it, and keeps the ragdoll on the stage):
+when the camera orbits, that a throw knocks a green bear down, turns the
+idle player to face it, and keeps the ragdoll on the stage, and that
+knocking every bear down wins the round with fireworks and a focused restart
+button; the harness ignores the real mouse while it runs):
 
 ```
 godot -- --shots

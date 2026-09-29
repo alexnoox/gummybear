@@ -39,3 +39,7 @@ _Avoid_: Reticle, crosshair, target indicator
 **Candy fence**:
 The low pastel fence round the stage that keeps the green bears in.
 _Avoid_: Wall, boundary
+
+**Round**:
+One game, from five standing green bears to all five knocked down. The win brings fireworks, then a restart button (no words) that starts a fresh round.
+_Avoid_: Level, match, game over
