@@ -6,8 +6,9 @@ extends Node3D
 ## rig's yaw) never compounds with mouse look; every rendered frame it snaps
 ## to the bear's interpolated position, with automatic interpolation off, so
 ## mouse look stays frame-rate steady. The rig is crisp on purpose: all the
-## gummy lag lives in the body's velocity/yaw lerps. Stick and mouse agree:
-## push up (or move the mouse up) to look up. Esc toggles cursor
+## gummy lag lives in the body's velocity/yaw lerps. Stick and mouse agree
+## by default: push up (or move the mouse up) to look up; `invert_stick_y`
+## flips the stick. Esc toggles cursor
 ## capture (a left click recaptures without throwing), the wheel zooms the spring arm,
 ## pitch is clamped so the camera neither dives under the stage nor flips
 ## over the bear.
@@ -31,6 +32,10 @@ const PIVOT_HEIGHT := 0.6
 ## right behind the bear, which then hides the sky.
 const SKY_PITCH := 0.1
 const SKY_TILT_TIME := 1.2
+
+## Flips the right stick's up/down (push up to look down). Set it on the
+## player's CameraRig in the Inspector; the mouse is never inverted.
+@export var invert_stick_y := false
 
 ## World-space camera yaw in radians; the bear steers toward this.
 var yaw: float:
@@ -62,8 +67,10 @@ func _process(delta: float) -> void:
 	# with the cursor free: the pad never needs mouse capture.
 	var look := Input.get_vector("look_left", "look_right", "look_up", "look_down")
 	rotation.y -= look.x * STICK_SPEED * delta
-	# Stick up (look.y < 0) raises pitch, like moving the mouse up.
-	_arm.rotation.x = clampf(_arm.rotation.x - look.y * STICK_SPEED * delta,
+	# Stick up (look.y < 0) raises pitch, like moving the mouse up, unless
+	# inverted.
+	var pitch_input := look.y if invert_stick_y else -look.y
+	_arm.rotation.x = clampf(_arm.rotation.x + pitch_input * STICK_SPEED * delta,
 			PITCH_MIN, PITCH_MAX)
 	_snap_to_body()
 
