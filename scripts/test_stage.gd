@@ -20,6 +20,7 @@ const SHOT_SCHEDULE := {
 	4.45: "seethrough.png",
 	6.60: "fireworks.png",
 	9.40: "restart.png",
+	9.57: "menu.png",
 }
 ## seconds -> silhouette window sampled after the frame is drawn
 const SILHOUETTE_SCHEDULE := {
@@ -54,7 +55,7 @@ const AIR_DRIVE_START := 0.55
 const AIR_DRIVE_END := 0.75
 const DRIVE_START := 1.6
 const DRIVE_END := 2.4
-const QUIT_AT := 9.6
+const QUIT_AT := 10.0
 ## After all world-axis checks, orbit the idle bear's camera a quarter turn:
 ## the body must stay put (no turn-in-place clip exists), and side.png shows
 ## the bear side-on for the shader's self-overlap check.
@@ -95,6 +96,25 @@ const SEETHROUGH_DISTANCE := 1.2
 ## free) by the end.
 const WIN_AT := 4.6
 const MAX_WIN_DELAY := 0.2
+## Last, the pause menu, through real pad buttons, one step every MENU_STEP
+## s: Start opens it (pausing the game, freeing the mouse, focusing the
+## first toggle); for each invert toggle in turn, A flips it on (checked on
+## the node and in the saved settings), A flips it back, and D-pad down moves
+## to the next; B closes it (unpausing, putting the mouse back as it was).
+## The player's saved settings file is backed up first and restored after.
+const MENU_START := 9.45
+const MENU_STEP := 0.05
+## [node path under the player, property]; the settings key is the property.
+const MENU_TOGGLES := [
+	["CameraRig", "invert_stick_y"],
+	[".", "invert_move_y"],
+	[".", "invert_move_x"],
+]
+const SETTINGS_PATH := "user://settings.cfg"
+const JOY_A := 0
+const JOY_B := 1
+const JOY_START := 6
+const JOY_DPAD_DOWN := 12
 
 @onready var _bear: CharacterBody3D = $Player
 
@@ -139,6 +159,11 @@ var _knocked_after := -1.0
 var _turn_error := -1.0
 var _behind: Node3D
 var _seethrough_order := ""
+var _menu_step := 0
+var _menu_failures: Array[String] = []
+var _menu_before: Array = []
+var _settings_backup: PackedByteArray
+var _settings_existed := false
 var _win_forced := false
 var _won_after := -1.0
 
@@ -154,6 +179,15 @@ func _ready() -> void:
 	_silhouette_pending.sort()
 	for window: String in SILHOUETTE_LIMITS:
 		_silhouette_sizes[window] = []
+	_settings_existed = FileAccess.file_exists(SETTINGS_PATH)
+	if _settings_existed:
+		_settings_backup = FileAccess.get_file_as_bytes(SETTINGS_PATH)
+	# The pause menu pauses the tree; the harness has to keep ticking to
+	# close it, but the stage's children must still pause.
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	for child in get_children():
+		if child.process_mode == Node.PROCESS_MODE_INHERIT:
+			child.process_mode = Node.PROCESS_MODE_PAUSABLE
 
 
 ## The evidence run drives everything through actions; a real mouse
@@ -246,6 +280,11 @@ func _physics_process(delta: float) -> void:
 			and _elapsed >= SEETHROUGH_CHECK_AT):
 		_seethrough_order = _draw_order_check()
 
+	if (_menu_step <= _menu_last_step()
+			and _elapsed >= MENU_START + _menu_step * MENU_STEP):
+		_run_menu_step(_menu_step)
+		_menu_step += 1
+
 	if not _win_forced and _elapsed >= WIN_AT:
 		for green: Node in get_tree().get_nodes_in_group("green_bears"):
 			green.call("knock", Vector3(0.0, 0.0, -1.0))
@@ -336,6 +375,87 @@ func _gummy_passes(bear: Node) -> Array[int]:
 	if depth == null or depth.next_pass == null:
 		return []
 	return [depth.render_priority, depth.next_pass.render_priority]
+
+
+func _press_pad(button: int) -> void:
+	for pressed in [true, false]:
+		var event := InputEventJoypadButton.new()
+		event.device = 0
+		event.button_index = button
+		event.pressed = pressed
+		Input.parse_input_event(event)
+	# Deliver now: buffered, they'd land at the next frame's flush, which can
+	# come after the next menu step when frames run slower than ticks.
+	Input.flush_buffered_events()
+
+
+## Open, first A, then two steps per toggle, then the closed check.
+func _menu_last_step() -> int:
+	return 2 * MENU_TOGGLES.size() + 2
+
+
+func _toggle_value(index: int) -> bool:
+	var toggle: Array = MENU_TOGGLES[index]
+	return _bear.get_node(toggle[0]).get(toggle[1])
+
+
+func _saved_value(index: int) -> Variant:
+	var saved := ConfigFile.new()
+	saved.load(SETTINGS_PATH)
+	return saved.get_value("controls", MENU_TOGGLES[index][1], "missing")
+
+
+func _run_menu_step(step: int) -> void:
+	var menu := get_node_or_null("PauseMenu")
+	if menu == null or not menu.has_method("is_open"):
+		if step == 0:
+			_menu_failures.append("no PauseMenu with is_open()")
+		return
+	var toggles := MENU_TOGGLES.size()
+	if step == 0:
+		_menu_before.clear()
+		for i in toggles:
+			_menu_before.append(_toggle_value(i))
+		_press_pad(JOY_START)
+	elif step == 1:
+		if not menu.call("is_open"):
+			_menu_failures.append("Start didn't open the menu")
+		if not get_tree().paused:
+			_menu_failures.append("the open menu didn't pause the game")
+		if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+			_menu_failures.append("the open menu left the mouse captured")
+		_press_pad(JOY_A)
+	elif step < _menu_last_step():
+		var index := (step - 2) / 2
+		var name: String = MENU_TOGGLES[index][1]
+		if (step - 2) % 2 == 0:
+			if _toggle_value(index) == _menu_before[index]:
+				_menu_failures.append("A didn't flip %s" % name)
+			if _saved_value(index) != (not _menu_before[index]):
+				_menu_failures.append("the flipped %s wasn't saved" % name)
+			_press_pad(JOY_A)
+		else:
+			if _toggle_value(index) != _menu_before[index]:
+				_menu_failures.append("a second A didn't flip %s back" % name)
+			if index + 1 < toggles:
+				_press_pad(JOY_DPAD_DOWN)
+				_press_pad(JOY_A)
+			else:
+				_press_pad(JOY_B)
+	else:
+		if menu.call("is_open"):
+			_menu_failures.append("B didn't close the menu")
+		if get_tree().paused:
+			_menu_failures.append("closing the menu didn't unpause the game")
+
+
+## Puts the player's settings file back as it was before the run.
+func _restore_settings() -> void:
+	if _settings_existed:
+		var file := FileAccess.open(SETTINGS_PATH, FileAccess.WRITE)
+		file.store_buffer(_settings_backup)
+	elif FileAccess.file_exists(SETTINGS_PATH):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(SETTINGS_PATH))
 
 
 ## (rig yaw, arm pitch) in radians.
@@ -510,6 +630,10 @@ func _finish() -> void:
 	elif _seethrough_order != "ok":
 		failures.append(_seethrough_order)
 	_validate_win(failures)
+	if _menu_step <= _menu_last_step():
+		failures.append("pause menu steps never finished")
+	failures.append_array(_menu_failures)
+	_restore_settings()
 	for window: String in SILHOUETTE_LIMITS:
 		_validate_silhouette(window, failures)
 	print("[test_stage] jump rise=%.3f air_dx=%.3f airborne=%s landed=%s double_boost=%s idle_yaw=%.3f" %

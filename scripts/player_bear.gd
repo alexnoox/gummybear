@@ -2,10 +2,12 @@ extends "res://scripts/gummy_bear.gd"
 
 ## The red player bear. Orbit-camera third person in strafe mode: WASD or the
 ## left stick is camera-relative and the body lazily yaws toward the orbit
-## camera while driving; Space or A jumps while grounded. Left click (mouse
-## captured) or the right trigger throws a dodgeball along the camera, with
+## camera while driving; Space or X jumps while grounded. Left click (mouse
+## captured), A or the right trigger throws a dodgeball along the camera, with
 ## strong aim assist toward the best-aligned standing green bear, which a
 ## bouncing marker points out. An idle bear quickly turns to face its throw.
+## The left stick's forward/back and left/right can each be inverted (pause
+## menu).
 ## The player is always cherry red.
 
 ## Top ground speed in m/s, reached at full stick (or any WASD key).
@@ -49,7 +51,13 @@ const MARKER_COLOUR := Color(1.0, 0.85, 0.1)
 ## breaks headless/CLI runs (e.g. the --shots harness) after a fresh edit.
 const ORBIT_CAMERA := preload("res://scripts/orbit_camera.gd")
 const BALL := preload("res://scripts/ball.gd")
+const SETTINGS := preload("res://scripts/settings.gd")
 const GUMMY_BEAR := preload("res://scripts/gummy_bear.gd")
+
+## Flip the walk input's forward/back and left/right. These are the
+## defaults; values saved from the pause menu win.
+@export var invert_move_y := false
+@export var invert_move_x := false
 
 var _cooldown := 0.0
 var _face_yaw := 0.0
@@ -64,6 +72,8 @@ var _marker: MeshInstance3D
 func _ready() -> void:
 	super()
 	add_to_group("player")
+	invert_move_y = SETTINGS.load_value("invert_move_y", invert_move_y)
+	invert_move_x = SETTINGS.load_value("invert_move_x", invert_move_x)
 	_build_marker()
 
 
@@ -71,6 +81,10 @@ func _steer(delta: float) -> Vector3:
 	if is_on_floor() and Input.is_action_just_pressed("jump"):
 		velocity.y = JUMP_VELOCITY
 	var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	if invert_move_x:
+		input.x = -input.x
+	if invert_move_y:
+		input.y = -input.y
 	# Strafe mode: while the player drives, the body chases the camera yaw.
 	# Idle, it holds still (no turn-in-place clip), except for a quick turn
 	# to face a throw. The camera rig is top_level, so this rotation never

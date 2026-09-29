@@ -2,7 +2,8 @@ extends CanvasLayer
 
 ## A big round restart button with no words: a yellow disc with a circular
 ## arrow drawn on it. It pops in, pulses, takes focus and frees the mouse,
-## so A, Enter, Space or a click all press it. Emits `pressed`.
+## so A, Enter, Space or a click all press it (A through ui_accept, which
+## the project's input map adds it to). Emits `pressed`.
 
 signal pressed
 
@@ -55,14 +56,6 @@ func appear() -> void:
 
 func is_ready() -> bool:
 	return visible and _button.has_focus()
-
-
-## Space and A also jump, so catch them as a press here in case the
-## default ui_accept map leaves the pad's A out.
-func _unhandled_input(event: InputEvent) -> void:
-	if visible and event.is_action_pressed("jump"):
-		get_viewport().set_input_as_handled()
-		pressed.emit()
 
 
 func _pulse() -> void:

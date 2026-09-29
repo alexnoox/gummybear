@@ -13,7 +13,7 @@ The locomotion model where, while the player is moving, the bear's body yaw foll
 _Avoid_: Camera-relative movement, relative controls
 
 **Orbit rig**:
-The player camera — a third-person rig that orbits and follows the bear, driven by the mouse (captured mouse, Esc releases, a left click recaptures) or the pad's right stick.
+The player camera — a third-person rig that orbits and follows the bear, driven by the mouse (captured mouse; the pause menu frees it, a left click recaptures) or the pad's right stick.
 _Avoid_: Chase camera, follow camera, third-person camera
 
 **Player bear**:
@@ -43,3 +43,7 @@ _Avoid_: Wall, boundary
 **Round**:
 One game, from every green bear standing (5 of them) to all of them knocked down. The win brings fireworks, then a restart button (no words) that starts a fresh round.
 _Avoid_: Level, match, game over
+
+**Pause menu**:
+The grown-up's menu (Esc or the pad's Menu button), which pauses the game and holds the saved invert options for the camera and the walk. Unlike the rest of the game it uses words.
+_Avoid_: Options screen, settings screen

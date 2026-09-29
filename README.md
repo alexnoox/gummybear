@@ -17,11 +17,11 @@ Godot drives with a code-built locomotion blend tree under a mouse-orbit camera.
 | Keyboard / mouse | Xbox pad | Action |
 |------------------|----------|--------|
 | WASD  | Left stick | Walk (forward / back / strafe); the stick is analog, up to 2.5 m/s |
-| Space | A | Jump (grounded only, no double jump) |
-| Left click | Right trigger | Throw a ball along the camera (every 0.3 s; aim assist bends it toward the green bear under the yellow arrow) |
-| Mouse | Right stick | Orbit camera (bear turns to follow while walking); push up to look up (tick `invert_stick_y` on the player's `CameraRig` to flip the stick) |
+| Space | X | Jump (grounded only, no double jump) |
+| Left click | A or right trigger | Throw a ball along the camera (every 0.3 s; aim assist bends it toward the green bear under the yellow arrow) |
+| Mouse | Right stick | Orbit camera (bear turns to follow while walking); push up to look up |
 | Wheel | — | Zoom |
-| Esc   | — | Release / recapture mouse (a left click also recaptures, without throwing) |
+| Esc | Menu (Start) | Pause menu: invert the camera's up/down or the walk's forward/back and left/right (saved to `user://settings.cfg`); Esc, Menu, B or Resume closes it. A left click recaptures the mouse without throwing |
 | Enter / Space / click | A | Restart, once every green bear is down and the round button shows |
 
 ## Layout
@@ -38,6 +38,7 @@ scripts/            gummy_bear.gd (shared body, ragdoll), player_bear.gd (input,
                     throw, aim assist), green_bear.gd (wander/flee),
                     orbit_camera.gd (camera rig), ball.gd, candy_fence.gd,
                     round.gd (win, restart), fireworks.gd, restart_button.gd,
+                    pause_menu.gd, settings.gd (saved invert options),
                     test_stage.gd (dev harness)
 shaders/            gummy_depth.gdshader (depth pre-pass), gummy.gdshader
                     (translucent candy look, rim light, contact fade)
@@ -96,7 +97,9 @@ when the camera orbits, that a throw knocks a green bear down, turns the
 idle player to face it, and keeps the ragdoll on the stage, and that
 a green bear behind the translucent player still draws (draw order), and that
 knocking every bear down wins the round with fireworks and a focused restart
-button; the harness ignores the real mouse while it runs):
+button, and that the pause menu opens on Start, flips and saves each invert
+toggle with A, and closes on B (your saved settings are restored after); the
+harness ignores the real mouse while it runs):
 
 ```
 godot -- --shots

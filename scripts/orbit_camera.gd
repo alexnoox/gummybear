@@ -8,8 +8,8 @@ extends Node3D
 ## mouse look stays frame-rate steady. The rig is crisp on purpose: all the
 ## gummy lag lives in the body's velocity/yaw lerps. Stick and mouse agree
 ## by default: push up (or move the mouse up) to look up; `invert_stick_y`
-## flips the stick. Esc toggles cursor
-## capture (a left click recaptures without throwing), the wheel zooms the spring arm,
+## flips the stick (the pause menu saves it). The pause menu frees the
+## cursor (a left click recaptures without throwing), the wheel zooms the spring arm,
 ## pitch is clamped so the camera neither dives under the stage nor flips
 ## over the bear.
 
@@ -17,6 +17,8 @@ extends Node3D
 const MOUSE_SENSITIVITY := 0.003
 ## Radians per second of rotation at full right-stick deflection.
 const STICK_SPEED := 3.0
+const SETTINGS := preload("res://scripts/settings.gd")
+
 ## Pitch limits in radians (−60°..+20°).
 const PITCH_MIN := -PI / 3.0
 const PITCH_MAX := PI / 9.0
@@ -33,8 +35,9 @@ const PIVOT_HEIGHT := 0.6
 const SKY_PITCH := 0.1
 const SKY_TILT_TIME := 1.2
 
-## Flips the right stick's up/down (push up to look down). Set it on the
-## player's CameraRig in the Inspector; the mouse is never inverted.
+## Flips the right stick's up/down (push up to look down). This is the
+## default; a value saved from the pause menu wins. The mouse is never
+## inverted.
 @export var invert_stick_y := false
 
 ## World-space camera yaw in radians; the bear steers toward this.
@@ -58,6 +61,7 @@ func _ready() -> void:
 	# The arm should only shorten against the world, never against the
 	# bear's own capsule sitting at the pivot.
 	_arm.add_excluded_object(_body.get_rid())
+	invert_stick_y = SETTINGS.load_value("invert_stick_y", invert_stick_y)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	_snap_to_body()
 
@@ -88,15 +92,8 @@ func _snap_to_body() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("ui_cancel"):
-		# Esc frees the cursor for window/editor work; Esc again resumes.
-		Input.mouse_mode = (Input.MOUSE_MODE_VISIBLE
-				if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
-				else Input.MOUSE_MODE_CAPTURED)
-		get_viewport().set_input_as_handled()
-		return
 	if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
-		# Clicking back into the game resumes mouse look, like Esc does.
+		# Clicking back into the game resumes mouse look.
 		# That click only recaptures: releasing `throw` (which the click has
 		# already pressed) keeps the player from throwing on it.
 		var click := event as InputEventMouseButton

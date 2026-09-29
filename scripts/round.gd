@@ -18,6 +18,8 @@ const FIREWORKS := preload("res://scripts/fireworks.gd")
 const RESTART_BUTTON := preload("res://scripts/restart_button.gd")
 
 var _won := false
+## (The timers below pass process_always = false so the pause menu holds
+## the show.)
 var _fireworks: FIREWORKS
 var _restart: RESTART_BUTTON
 
@@ -60,7 +62,7 @@ func _win() -> void:
 	var player := get_tree().get_first_node_in_group("player") as Node3D
 	if player != null:
 		player.call("celebrate")
-	await get_tree().create_timer(CELEBRATE_DELAY).timeout
+	await get_tree().create_timer(CELEBRATE_DELAY, false).timeout
 	var camera := get_viewport().get_camera_3d()
 	var forward := -camera.global_basis.z
 	forward.y = 0.0
@@ -69,7 +71,7 @@ func _win() -> void:
 	var centre := origin + forward * SHOW_DISTANCE
 	centre.y = 0.0
 	_fireworks.start(centre, forward)
-	await get_tree().create_timer(RESTART_DELAY - CELEBRATE_DELAY).timeout
+	await get_tree().create_timer(RESTART_DELAY - CELEBRATE_DELAY, false).timeout
 	_restart.appear()
 
 
