@@ -98,17 +98,15 @@ const WIN_AT := 4.6
 const MAX_WIN_DELAY := 0.2
 ## Last, the pause menu, through real pad buttons, one step every MENU_STEP
 ## s: Start opens it (pausing the game, freeing the mouse, focusing the
-## first toggle); for each invert toggle in turn, A flips it on (checked on
-## the node and in the saved settings), A flips it back, and D-pad down moves
-## to the next; B closes it (unpausing, putting the mouse back as it was).
+## first toggle); for each toggle in turn, A flips it on (checked on the
+## node and in the saved settings), A flips it back, and D-pad down moves to
+## the next; B closes it (unpausing, putting the mouse back as it was).
 ## The player's saved settings file is backed up first and restored after.
 const MENU_START := 9.45
 const MENU_STEP := 0.05
 ## [node path under the player, property]; the settings key is the property.
 const MENU_TOGGLES := [
 	["CameraRig", "invert_stick_y"],
-	[".", "invert_move_y"],
-	[".", "invert_move_x"],
 ]
 const SETTINGS_PATH := "user://settings.cfg"
 const JOY_A := 0

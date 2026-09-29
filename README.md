@@ -21,7 +21,7 @@ Godot drives with a code-built locomotion blend tree under a mouse-orbit camera.
 | Left click | A or right trigger | Throw a ball along the camera (every 0.3 s; aim assist bends it toward the green bear under the yellow arrow) |
 | Mouse | Right stick | Orbit camera (bear turns to follow while walking); push up to look up |
 | Wheel | — | Zoom |
-| Esc | Menu (Start) | Pause menu: invert the camera's up/down or the walk's forward/back and left/right (saved to `user://settings.cfg`); Esc, Menu, B or Resume closes it. A left click recaptures the mouse without throwing |
+| Esc | Menu (Start) | Pause menu: invert the right stick's up/down (saved to `user://settings.cfg`); Esc, Menu, B or Resume closes it. A left click recaptures the mouse without throwing |
 | Enter / Space / click | A | Restart, once every green bear is down and the round button shows |
 
 ## Layout
@@ -97,7 +97,7 @@ when the camera orbits, that a throw knocks a green bear down, turns the
 idle player to face it, and keeps the ragdoll on the stage, and that
 a green bear behind the translucent player still draws (draw order), and that
 knocking every bear down wins the round with fireworks and a focused restart
-button, and that the pause menu opens on Start, flips and saves each invert
+button, and that the pause menu opens on Start, flips and saves the invert
 toggle with A, and closes on B (your saved settings are restored after); the
 harness ignores the real mouse while it runs):
 

@@ -2,10 +2,9 @@ extends CanvasLayer
 
 ## The pause menu, for the grown-up: Esc or the pad's Menu (Start) button
 ## opens it, pausing the game and freeing the mouse; Esc, Menu, B or Resume
-## close it and put the mouse back as it was. It holds the invert toggles
-## for the camera (right stick up/down) and walking (left stick forward/back
-## and left/right); each change is saved (settings.gd) so it sticks. The
-## D-pad or left stick moves between rows and A presses.
+## close it and put the mouse back as it was. It holds the camera's invert
+## toggle (right stick up/down), saved (settings.gd) so it sticks. The D-pad
+## or left stick moves between rows and A presses.
 
 const SETTINGS := preload("res://scripts/settings.gd")
 
@@ -13,8 +12,6 @@ const SETTINGS := preload("res://scripts/settings.gd")
 ## saved setting's key.
 const TOGGLES := [
 	["Invert camera up/down (right stick)", "CameraRig", "invert_stick_y"],
-	["Invert walk forward/back (left stick)", ".", "invert_move_y"],
-	["Invert walk left/right (left stick)", ".", "invert_move_x"],
 ]
 
 const FONT_SIZE := 24
