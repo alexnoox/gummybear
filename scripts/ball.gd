@@ -91,6 +91,7 @@ func _on_body_entered(body: Node) -> void:
 func _pop() -> void:
 	if is_queued_for_deletion():
 		return
+	Sounds.play("pop")
 	var burst := CPUParticles3D.new()
 	burst.one_shot = true
 	burst.explosiveness = 1.0

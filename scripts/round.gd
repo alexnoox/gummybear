@@ -59,6 +59,7 @@ func _physics_process(_delta: float) -> void:
 
 func _win() -> void:
 	_won = true
+	Sounds.play("win")
 	var player := get_tree().get_first_node_in_group("player") as Node3D
 	if player != null:
 		player.call("celebrate")

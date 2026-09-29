@@ -20,7 +20,8 @@ const SHOT_SCHEDULE := {
 	4.45: "seethrough.png",
 	6.60: "fireworks.png",
 	9.40: "restart.png",
-	9.57: "menu.png",
+	9.60: "menu.png",
+	9.80: "sounds.png",
 }
 ## seconds -> silhouette window sampled after the frame is drawn
 const SILHOUETTE_SCHEDULE := {
@@ -55,7 +56,7 @@ const AIR_DRIVE_START := 0.55
 const AIR_DRIVE_END := 0.75
 const DRIVE_START := 1.6
 const DRIVE_END := 2.4
-const QUIT_AT := 10.0
+const QUIT_AT := 10.2
 ## After all world-axis checks, orbit the idle bear's camera a quarter turn:
 ## the body must stay put (no turn-in-place clip exists), and side.png shows
 ## the bear side-on for the shader's self-overlap check.
@@ -98,17 +99,22 @@ const WIN_AT := 4.6
 const MAX_WIN_DELAY := 0.2
 ## Last, the pause menu, through real pad buttons, one step every MENU_STEP
 ## s: Start opens it (pausing the game, freeing the mouse, focusing the
-## first toggle); for each toggle in turn, A flips it on (checked on the
-## node and in the saved settings), A flips it back, and D-pad down moves to
-## the next; B closes it (unpausing, putting the mouse back as it was).
-## The player's saved settings file is backed up first and restored after.
+## invert toggle); A flips invert on (checked on the camera and in the saved
+## settings) and A flips it back; D-pad down then A opens the Sounds page
+## (one row per sound); B goes back to the main page and B again closes the
+## menu (unpausing, putting the mouse back as it was). The player's saved
+## settings file is backed up first and restored after.
 const MENU_START := 9.45
-const MENU_STEP := 0.05
-## [node path under the player, property]; the settings key is the property.
-const MENU_TOGGLES := [
-	["CameraRig", "invert_stick_y"],
-]
+const MENU_STEP := 0.1
+const MENU_LAST_STEP := 6
 const SETTINGS_PATH := "user://settings.cfg"
+## Recorded sounds: the harness can't use a microphone, so it gives every
+## event a short synthetic beep, kept in its own folder (the player's
+## recordings are left alone) with the speakers muted, and asserts each
+## event's sound played during the run: throw, hit (the knock), pop (the
+## ball after its bounces), win, and walk (footsteps while driving).
+const SOUND_EVENTS := ["throw", "hit", "pop", "win", "walk"]
+const HARNESS_SOUND_DIR := "user://harness_sounds"
 const JOY_A := 0
 const JOY_B := 1
 const JOY_START := 6
@@ -159,7 +165,7 @@ var _behind: Node3D
 var _seethrough_order := ""
 var _menu_step := 0
 var _menu_failures: Array[String] = []
-var _menu_before: Array = []
+var _menu_invert_before := false
 var _settings_backup: PackedByteArray
 var _settings_existed := false
 var _win_forced := false
@@ -180,6 +186,10 @@ func _ready() -> void:
 	_settings_existed = FileAccess.file_exists(SETTINGS_PATH)
 	if _settings_existed:
 		_settings_backup = FileAccess.get_file_as_bytes(SETTINGS_PATH)
+	AudioServer.set_bus_mute(AudioServer.get_bus_index("Master"), true)
+	Sounds.use_directory(HARNESS_SOUND_DIR)
+	for event: String in SOUND_EVENTS:
+		Sounds.set_sound(event, _beep())
 	# The pause menu pauses the tree; the harness has to keep ticking to
 	# close it, but the stage's children must still pause.
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -278,7 +288,7 @@ func _physics_process(delta: float) -> void:
 			and _elapsed >= SEETHROUGH_CHECK_AT):
 		_seethrough_order = _draw_order_check()
 
-	if (_menu_step <= _menu_last_step()
+	if (_menu_step <= MENU_LAST_STEP
 			and _elapsed >= MENU_START + _menu_step * MENU_STEP):
 		_run_menu_step(_menu_step)
 		_menu_step += 1
@@ -387,64 +397,84 @@ func _press_pad(button: int) -> void:
 	Input.flush_buffered_events()
 
 
-## Open, first A, then two steps per toggle, then the closed check.
-func _menu_last_step() -> int:
-	return 2 * MENU_TOGGLES.size() + 2
-
-
-func _toggle_value(index: int) -> bool:
-	var toggle: Array = MENU_TOGGLES[index]
-	return _bear.get_node(toggle[0]).get(toggle[1])
-
-
-func _saved_value(index: int) -> Variant:
+func _saved_invert() -> Variant:
 	var saved := ConfigFile.new()
 	saved.load(SETTINGS_PATH)
-	return saved.get_value("controls", MENU_TOGGLES[index][1], "missing")
+	return saved.get_value("controls", "invert_stick_y", "missing")
 
 
 func _run_menu_step(step: int) -> void:
 	var menu := get_node_or_null("PauseMenu")
-	if menu == null or not menu.has_method("is_open"):
+	if menu == null or not menu.has_method("sounds_page_open"):
 		if step == 0:
-			_menu_failures.append("no PauseMenu with is_open()")
+			_menu_failures.append("no PauseMenu with a Sounds page")
 		return
-	var toggles := MENU_TOGGLES.size()
-	if step == 0:
-		_menu_before.clear()
-		for i in toggles:
-			_menu_before.append(_toggle_value(i))
-		_press_pad(JOY_START)
-	elif step == 1:
-		if not menu.call("is_open"):
-			_menu_failures.append("Start didn't open the menu")
-		if not get_tree().paused:
-			_menu_failures.append("the open menu didn't pause the game")
-		if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-			_menu_failures.append("the open menu left the mouse captured")
-		_press_pad(JOY_A)
-	elif step < _menu_last_step():
-		var index := (step - 2) / 2
-		var name: String = MENU_TOGGLES[index][1]
-		if (step - 2) % 2 == 0:
-			if _toggle_value(index) == _menu_before[index]:
-				_menu_failures.append("A didn't flip %s" % name)
-			if _saved_value(index) != (not _menu_before[index]):
-				_menu_failures.append("the flipped %s wasn't saved" % name)
+	var rig := _bear.get_node("CameraRig")
+	match step:
+		0:
+			_menu_invert_before = rig.get("invert_stick_y")
+			_press_pad(JOY_START)
+		1:
+			if not menu.call("is_open"):
+				_menu_failures.append("Start didn't open the menu")
+			if not get_tree().paused:
+				_menu_failures.append("the open menu didn't pause the game")
+			if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+				_menu_failures.append("the open menu left the mouse captured")
 			_press_pad(JOY_A)
-		else:
-			if _toggle_value(index) != _menu_before[index]:
-				_menu_failures.append("a second A didn't flip %s back" % name)
-			if index + 1 < toggles:
-				_press_pad(JOY_DPAD_DOWN)
-				_press_pad(JOY_A)
-			else:
-				_press_pad(JOY_B)
-	else:
-		if menu.call("is_open"):
-			_menu_failures.append("B didn't close the menu")
-		if get_tree().paused:
-			_menu_failures.append("closing the menu didn't unpause the game")
+		2:
+			if rig.get("invert_stick_y") == _menu_invert_before:
+				_menu_failures.append("A didn't flip invert_stick_y")
+			if _saved_invert() != (not _menu_invert_before):
+				_menu_failures.append("the flipped invert_stick_y wasn't saved")
+			_press_pad(JOY_A)
+		3:
+			if rig.get("invert_stick_y") != _menu_invert_before:
+				_menu_failures.append("a second A didn't flip invert_stick_y back")
+			_press_pad(JOY_DPAD_DOWN)
+			_press_pad(JOY_A)
+		4:
+			if not menu.call("sounds_page_open"):
+				_menu_failures.append("D-pad down + A didn't open the Sounds page")
+			elif menu.call("sound_rows") != SOUND_EVENTS.size():
+				_menu_failures.append("the Sounds page has %d rows (want %d)" %
+						[menu.call("sound_rows"), SOUND_EVENTS.size()])
+			_press_pad(JOY_B)
+		5:
+			if menu.call("sounds_page_open") or not menu.call("is_open"):
+				_menu_failures.append("B on the Sounds page didn't go back to the menu")
+			_press_pad(JOY_B)
+		6:
+			if menu.call("is_open"):
+				_menu_failures.append("B didn't close the menu")
+			if get_tree().paused:
+				_menu_failures.append("closing the menu didn't unpause the game")
+
+
+## 0.2 s of a 440 Hz tone, 16-bit mono.
+func _beep() -> AudioStreamWAV:
+	var rate := 22050
+	var data := PackedByteArray()
+	data.resize(int(rate * 0.2) * 2)
+	for i in data.size() / 2:
+		data.encode_s16(i * 2, int(sin(TAU * 440.0 * i / rate) * 8000.0))
+	var wav := AudioStreamWAV.new()
+	wav.format = AudioStreamWAV.FORMAT_16_BITS
+	wav.mix_rate = rate
+	wav.data = data
+	return wav
+
+
+func _validate_sounds(failures: Array[String]) -> void:
+	var counts := []
+	for event: String in SOUND_EVENTS:
+		var plays: int = Sounds.play_count(event)
+		counts.append("%s=%d" % [event, plays])
+		if plays == 0:
+			failures.append("the %s sound never played" % event)
+		Sounds.clear(event)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(HARNESS_SOUND_DIR))
+	print("[test_stage] sounds %s" % " ".join(counts))
 
 
 ## Puts the player's settings file back as it was before the run.
@@ -628,9 +658,10 @@ func _finish() -> void:
 	elif _seethrough_order != "ok":
 		failures.append(_seethrough_order)
 	_validate_win(failures)
-	if _menu_step <= _menu_last_step():
+	if _menu_step <= MENU_LAST_STEP:
 		failures.append("pause menu steps never finished")
 	failures.append_array(_menu_failures)
+	_validate_sounds(failures)
 	_restore_settings()
 	for window: String in SILHOUETTE_LIMITS:
 		_validate_silhouette(window, failures)

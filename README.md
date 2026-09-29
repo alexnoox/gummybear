@@ -21,7 +21,7 @@ Godot drives with a code-built locomotion blend tree under a mouse-orbit camera.
 | Left click | A or right trigger | Throw a ball along the camera (every 0.3 s; aim assist bends it toward the green bear under the yellow arrow) |
 | Mouse | Right stick | Orbit camera (bear turns to follow while walking); push up to look up |
 | Wheel | — | Zoom |
-| Esc | Menu (Start) | Pause menu: invert the right stick's up/down (saved to `user://settings.cfg`); Esc, Menu, B or Resume closes it. A left click recaptures the mouse without throwing |
+| Esc | Menu (Start) | Pause menu: invert the right stick's up/down (saved to `user://settings.cfg`), and **Sounds**: record your own sound for throw, hit, ball pop, win and walk (hold Record, up to 3 s; saved as `user://sounds/<event>.wav`). Esc, Menu, B or Resume closes it (B on the Sounds page goes back). A left click recaptures the mouse without throwing |
 | Enter / Space / click | A | Restart, once every green bear is down and the round button shows |
 
 ## Layout
@@ -39,6 +39,7 @@ scripts/            gummy_bear.gd (shared body, ragdoll), player_bear.gd (input,
                     orbit_camera.gd (camera rig), ball.gd, candy_fence.gd,
                     round.gd (win, restart), fireworks.gd, restart_button.gd,
                     pause_menu.gd, settings.gd (saved invert options),
+                    sounds.gd (autoload: recorded sound effects),
                     test_stage.gd (dev harness)
 shaders/            gummy_depth.gdshader (depth pre-pass), gummy.gdshader
                     (translucent candy look, rim light, contact fade)
@@ -74,6 +75,13 @@ renders/            README hero render
   camera tilts up, `fireworks.gd` launches rockets either side of the view,
   and `restart_button.gd` pops up a word-free round button (a drawn ↻) that
   reloads the stage.
+- `sounds.gd` is an autoload (`Sounds`). Each game moment (throw, hit, ball
+  pop, win, and the red bear's footsteps) plays its recording, if any, at
+  ±10% pitch. Recording uses Godot's microphone path: an
+  `AudioStreamMicrophone` into a muted "Record" bus with an
+  `AudioEffectRecord` (`audio/driver/enable_input` is on). macOS asks for
+  microphone permission the first time, on behalf of the app that launched
+  Godot (the Godot editor, or your terminal).
 - The gummy look is two shader passes on one material
   (`materials/gummy_material.tres`): a depth-only pre-pass
   (`shaders/gummy_depth.gdshader`) writes the bear's nearest-surface depth,
@@ -98,8 +106,10 @@ idle player to face it, and keeps the ragdoll on the stage, and that
 a green bear behind the translucent player still draws (draw order), and that
 knocking every bear down wins the round with fireworks and a focused restart
 button, and that the pause menu opens on Start, flips and saves the invert
-toggle with A, and closes on B (your saved settings are restored after); the
-harness ignores the real mouse while it runs):
+toggle with A, opens the Sounds page and goes back on B, and closes on B
+(your saved settings are restored after), and that every sound event plays
+(with synthetic beeps in a separate folder, speakers muted; your recordings
+are left alone); the harness ignores the real mouse while it runs):
 
 ```
 godot -- --shots

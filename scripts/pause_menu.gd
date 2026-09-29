@@ -2,9 +2,12 @@ extends CanvasLayer
 
 ## The pause menu, for the grown-up: Esc or the pad's Menu (Start) button
 ## opens it, pausing the game and freeing the mouse; Esc, Menu, B or Resume
-## close it and put the mouse back as it was. It holds the camera's invert
-## toggle (right stick up/down), saved (settings.gd) so it sticks. The D-pad
-## or left stick moves between rows and A presses.
+## close it and put the mouse back as it was. The main page holds the
+## camera's invert toggle (right stick up/down), saved (settings.gd) so it
+## sticks, and a Sounds button. The Sounds page has one row per game sound
+## (sounds.gd): hold Record (A on the pad, or click and hold) to record up
+## to 3 s, which then plays back; Play and Clear. B goes back. The D-pad or
+## left stick moves between buttons and A presses.
 
 const SETTINGS := preload("res://scripts/settings.gd")
 
@@ -13,12 +16,26 @@ const SETTINGS := preload("res://scripts/settings.gd")
 const TOGGLES := [
 	["Invert camera up/down (right stick)", "CameraRig", "invert_stick_y"],
 ]
+## Sounds page rows, in order: [event, label].
+const SOUND_ROWS := [
+	["throw", "Throw"],
+	["hit", "Hit"],
+	["pop", "Ball pop"],
+	["win", "Win"],
+	["walk", "Walk"],
+]
+const SOUNDS_HINT := "Hold Record to record (up to 3 s)."
 
 const FONT_SIZE := 24
 const PANEL_COLOUR := Color(0.14, 0.12, 0.2)
 
 var _checks: Array[CheckButton] = []
-var _resume: Button
+var _main_page: VBoxContainer
+var _sounds_page: VBoxContainer
+var _sounds_button: Button
+var _status: Label
+## event -> [record, play, clear] buttons
+var _sound_buttons := {}
 var _mouse_mode_before := Input.MOUSE_MODE_CAPTURED
 ## Whatever had focus before (the restart button, say), given back on close
 ## so A still presses it.
@@ -48,26 +65,73 @@ func _ready() -> void:
 	for side in ["left", "right", "top", "bottom"]:
 		margin.add_theme_constant_override("margin_" + side, 24)
 	panel.add_child(margin)
-	var rows := VBoxContainer.new()
-	rows.add_theme_constant_override("separation", 12)
-	margin.add_child(rows)
+	var pages := VBoxContainer.new()
+	margin.add_child(pages)
+	_main_page = _page()
+	pages.add_child(_main_page)
+	_sounds_page = _page()
+	pages.add_child(_sounds_page)
+	_build_main_page()
+	_build_sounds_page()
+	_sounds_page.visible = false
+	Sounds.recorded.connect(_on_recorded)
 
+
+func _build_main_page() -> void:
 	for toggle: Array in TOGGLES:
 		var check := CheckButton.new()
 		check.text = toggle[0]
-		check.add_theme_font_size_override("font_size", FONT_SIZE)
+		_sized(check)
 		check.toggled.connect(_on_toggled.bind(toggle[1], toggle[2]))
-		rows.add_child(check)
+		_main_page.add_child(check)
 		_checks.append(check)
-	_resume = Button.new()
-	_resume.text = "Resume"
-	_resume.add_theme_font_size_override("font_size", FONT_SIZE)
-	_resume.pressed.connect(close)
-	rows.add_child(_resume)
+	_sounds_button = _button("Sounds", _show_sounds)
+	_main_page.add_child(_sounds_button)
+	_main_page.add_child(_button("Resume", close))
+
+
+func _build_sounds_page() -> void:
+	var hint := Label.new()
+	hint.text = SOUNDS_HINT
+	_sized(hint)
+	_sounds_page.add_child(hint)
+	var grid := GridContainer.new()
+	grid.columns = 4
+	grid.add_theme_constant_override("h_separation", 12)
+	grid.add_theme_constant_override("v_separation", 8)
+	_sounds_page.add_child(grid)
+	for row: Array in SOUND_ROWS:
+		var event: String = row[0]
+		var title := Label.new()
+		title.text = row[1]
+		_sized(title)
+		grid.add_child(title)
+		var record := _button("Record", Callable())
+		# Walkie-talkie: recording lasts while the button is held (A or the
+		# mouse); Sounds stops it by itself after 3 s.
+		record.button_down.connect(_on_record_down.bind(event, row[1]))
+		record.button_up.connect(Sounds.stop_recording)
+		var play := _button("Play", Sounds.play.bind(event, false))
+		var clear := _button("Clear", _on_clear.bind(event))
+		for button in [record, play, clear]:
+			grid.add_child(button)
+		_sound_buttons[event] = [record, play, clear]
+	_status = Label.new()
+	_sized(_status)
+	_sounds_page.add_child(_status)
+	_sounds_page.add_child(_button("Back", _show_main))
 
 
 func is_open() -> bool:
 	return visible
+
+
+func sounds_page_open() -> bool:
+	return visible and _sounds_page.visible
+
+
+func sound_rows() -> int:
+	return _sound_buttons.size()
 
 
 func open() -> void:
@@ -82,12 +146,14 @@ func open() -> void:
 	visible = true
 	get_tree().paused = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	_show_main()
 	_checks[0].grab_focus()
 
 
 func close() -> void:
 	if not visible:
 		return
+	Sounds.stop_recording()
 	visible = false
 	get_tree().paused = false
 	Input.mouse_mode = _mouse_mode_before
@@ -105,8 +171,57 @@ func _unhandled_input(event: InputEvent) -> void:
 			open()
 		get_viewport().set_input_as_handled()
 	elif visible and event.is_action_pressed("ui_cancel"):
-		close()
+		if _sounds_page.visible:
+			_show_main()
+		else:
+			close()
 		get_viewport().set_input_as_handled()
+
+
+func _show_main() -> void:
+	Sounds.stop_recording()
+	var was_sounds := _sounds_page.visible
+	_sounds_page.visible = false
+	_main_page.visible = true
+	if was_sounds:
+		_sounds_button.grab_focus()
+
+
+func _show_sounds() -> void:
+	_main_page.visible = false
+	_sounds_page.visible = true
+	_status.text = ""
+	_refresh_sounds()
+	(_sound_buttons[SOUND_ROWS[0][0]][0] as Button).grab_focus()
+
+
+func _refresh_sounds() -> void:
+	for event: String in _sound_buttons:
+		var has := Sounds.has_sound(event)
+		_sound_buttons[event][1].disabled = not has
+		_sound_buttons[event][2].disabled = not has
+
+
+func _on_record_down(event: String, label: String) -> void:
+	Sounds.start_recording(event)
+	_status.text = "Recording %s… let go to stop." % label
+
+
+func _on_recorded(event: String, ok: bool) -> void:
+	_refresh_sounds()
+	if ok:
+		_status.text = "Got it!"
+		Sounds.play(event, false)
+	else:
+		_status.text = "Nothing came in. Check the microphone (System Settings → Privacy → Microphone)."
+
+
+func _on_clear(event: String) -> void:
+	Sounds.clear(event)
+	_status.text = ""
+	_refresh_sounds()
+	# The Clear button just disabled itself; keep focus on the row.
+	(_sound_buttons[event][0] as Button).grab_focus()
 
 
 func _on_toggled(on: bool, path: String, property: String) -> void:
@@ -120,3 +235,22 @@ func _on_toggled(on: bool, path: String, property: String) -> void:
 func _target(path: String) -> Node:
 	var player := get_tree().get_first_node_in_group("player")
 	return player.get_node_or_null(path) if player != null else null
+
+
+func _page() -> VBoxContainer:
+	var page := VBoxContainer.new()
+	page.add_theme_constant_override("separation", 12)
+	return page
+
+
+func _button(text: String, on_pressed: Callable) -> Button:
+	var button := Button.new()
+	button.text = text
+	_sized(button)
+	if on_pressed.is_valid():
+		button.pressed.connect(on_pressed)
+	return button
+
+
+func _sized(control: Control) -> void:
+	control.add_theme_font_size_override("font_size", FONT_SIZE)

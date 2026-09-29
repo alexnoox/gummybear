@@ -45,5 +45,9 @@ One game, from every green bear standing (5 of them) to all of them knocked down
 _Avoid_: Level, match, game over
 
 **Pause menu**:
-The grown-up's menu (Esc or the pad's Menu button), which pauses the game and holds the saved invert option for the camera's up/down. Unlike the rest of the game it uses words.
+The grown-up's menu (Esc or the pad's Menu button), which pauses the game and holds the saved invert option for the camera's up/down, and the Sounds page. Unlike the rest of the game it uses words.
 _Avoid_: Options screen, settings screen
+
+**Sound effect**:
+A sound the players record themselves for one game moment (throw, hit, ball pop, win, walk) on the pause menu's Sounds page. A moment with no recording is silent.
+_Avoid_: SFX, audio clip, sample

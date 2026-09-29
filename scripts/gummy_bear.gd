@@ -340,6 +340,7 @@ func knock(hit_velocity: Vector3) -> void:
 	if _down or _ragdoll == null:
 		return
 	_down = true
+	Sounds.play("hit")
 	velocity = Vector3.ZERO
 	collision_layer = 0
 	$CollisionShape3D.set_deferred("disabled", true)

@@ -28,6 +28,12 @@ const THROW_REACH := 0.3
 const FACE_LERP := 15.0
 const FACE_TIME := 0.4
 
+## Footsteps: the walk clips are 1 s loops with two steps, played at 1× up
+## to STRIDE_SPEED and proportionally faster above it; the walk sound plays
+## once per step while the grounded bear moves faster than STEP_MIN_SPEED.
+const STEPS_PER_CYCLE := 2.0
+const STEP_MIN_SPEED := 0.3
+
 ## Aim assist: the standing green bear best aligned with the camera, within
 ## this half-angle (radians, ±30°) and horizontal range (m), is the target.
 const ASSIST_ANGLE := PI / 6.0
@@ -52,6 +58,8 @@ const BALL := preload("res://scripts/ball.gd")
 const GUMMY_BEAR := preload("res://scripts/gummy_bear.gd")
 
 var _cooldown := 0.0
+## Progress toward the next footstep, in steps.
+var _step_phase := 0.0
 var _face_yaw := 0.0
 var _face_time_left := 0.0
 var _aim_target: GUMMY_BEAR
@@ -86,10 +94,23 @@ func _steer(delta: float) -> Vector3:
 
 func _physics_process(delta: float) -> void:
 	super(delta)
+	_footsteps(delta)
 	_cooldown = maxf(0.0, _cooldown - delta)
 	_aim_target = _pick_target()
 	if Input.is_action_just_pressed("throw") and _cooldown == 0.0:
 		_throw()
+
+
+func _footsteps(delta: float) -> void:
+	var speed := Vector2(velocity.x, velocity.z).length()
+	if not is_on_floor() or speed < STEP_MIN_SPEED:
+		# Primed so the first step of the next walk sounds almost at once.
+		_step_phase = 0.8
+		return
+	_step_phase += delta * STEPS_PER_CYCLE * maxf(1.0, speed / STRIDE_SPEED)
+	if _step_phase >= 1.0:
+		_step_phase -= 1.0
+		Sounds.play("walk")
 
 
 func _process(delta: float) -> void:
@@ -147,6 +168,7 @@ func _throw() -> void:
 		launch = aim.normalized() * THROW_SPEED
 	_face_yaw = yaw_of(launch)
 	_face_time_left = FACE_TIME
+	Sounds.play("throw")
 
 	var ball: RigidBody3D = BALL.new()
 	get_parent().add_child(ball)
