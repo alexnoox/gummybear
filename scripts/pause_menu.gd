@@ -7,7 +7,9 @@ extends CanvasLayer
 ## sticks, and a Sounds button. The Sounds page has one row per game sound
 ## (sounds.gd): hold Record (A on the pad, or click and hold) to record up
 ## to 3 s, which then plays back; Play and Clear. B goes back. The D-pad or
-## left stick moves between buttons and A presses.
+## left stick moves between buttons and A presses. F11 or Alt+Enter switches
+## between full screen and a window at any time (exported builds start full
+## screen: project.godot's window/size/mode.template).
 
 const SETTINGS := preload("res://scripts/settings.gd")
 
@@ -164,7 +166,13 @@ func close() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("menu"):
+	if event.is_action_pressed("toggle_fullscreen"):
+		var window := get_window()
+		window.mode = (Window.MODE_WINDOWED if window.mode == Window.MODE_FULLSCREEN
+				or window.mode == Window.MODE_EXCLUSIVE_FULLSCREEN
+				else Window.MODE_FULLSCREEN)
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("menu"):
 		if visible:
 			close()
 		else:

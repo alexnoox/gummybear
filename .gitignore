@@ -16,3 +16,6 @@
 /renders/*
 !/renders/final_Cam34.png
 !/renders/.gdignore
+
+# Exported builds
+/build/

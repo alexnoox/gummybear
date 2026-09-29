@@ -96,7 +96,27 @@ renders/            README hero render
 ## Running
 
 Open the project in Godot 4.7 and run — `scenes/test_stage.tscn` is the main
-scene.
+scene. F11 or Alt+Enter toggles full screen.
+
+### On the Windows PC by the TV
+
+`export_presets.cfg` has a **Windows Desktop** preset that builds one
+self-contained `build/windows/GummyBear.exe` (the game data is embedded).
+Exported builds start full screen.
+
+1. Once per Godot version, on the Mac: **Editor → Manage Export Templates →
+   Download and Install** (the .NET editor needs the .NET templates it
+   offers).
+2. **Project → Export → Windows Desktop → Export Project** (or headless:
+   `godot --headless --path . --export-release "Windows Desktop" build/windows/GummyBear.exe`).
+3. Copy `GummyBear.exe` to the PC (USB stick or shared folder) and
+   double-click it. The first time, Windows SmartScreen may say it's
+   unrecognised: **More info → Run anyway**.
+4. Plug the Xbox pad into the PC (or pair it over Bluetooth). To record
+   sounds there, the PC needs a microphone, and Windows' **Settings →
+   Privacy → Microphone → Let desktop apps access your microphone** must be
+   on. Recordings and settings live on each computer
+   (`%APPDATA%\Godot\app_userdata\Gummy Bear` on Windows).
 
 Evidence run (opens a window; captures
 screenshots to `.dev/` and validates the jump contract, the idle/walk
