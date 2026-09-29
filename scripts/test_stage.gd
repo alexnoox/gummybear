@@ -409,8 +409,10 @@ func _validate_win(failures: Array[String]) -> void:
 		failures.append("restart button is not showing and focused")
 	if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		failures.append("mouse is still captured, so the restart button can't be clicked")
-	print("[test_stage] won_after=%.2f rockets=%d restart_ready=%s" %
-			[_won_after, rockets, restart_ready])
+	print("[test_stage] won_after=%.2f rockets=%d restart_ready=%s greens=%d fps=%d" %
+			[_won_after, rockets, restart_ready,
+			get_tree().get_nodes_in_group("green_bears").size(),
+			Engine.get_frames_per_second()])
 
 
 func _finish() -> void:
