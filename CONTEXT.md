@@ -41,5 +41,5 @@ The low pastel fence round the stage that keeps the green bears in.
 _Avoid_: Wall, boundary
 
 **Round**:
-One game, from every green bear standing (30 of them) to all of them knocked down. The win brings fireworks, then a restart button (no words) that starts a fresh round.
+One game, from every green bear standing (36 of them) to all of them knocked down. The win brings fireworks, then a restart button (no words) that starts a fresh round.
 _Avoid_: Level, match, game over

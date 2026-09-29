@@ -172,5 +172,29 @@ wander_seed = 29
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.7, 0, 6.9)
 wander_seed = 30
 
+[node name="GreenBear31" parent="." instance=ExtResource("3_green")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8.1, 0, -2.9)
+wander_seed = 31
+
+[node name="GreenBear32" parent="." instance=ExtResource("3_green")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.6, 0, 6.7)
+wander_seed = 32
+
+[node name="GreenBear33" parent="." instance=ExtResource("3_green")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.1, 0, 4.2)
+wander_seed = 33
+
+[node name="GreenBear34" parent="." instance=ExtResource("3_green")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.6, 0, -4.7)
+wander_seed = 34
+
+[node name="GreenBear35" parent="." instance=ExtResource("3_green")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.8, 0, -5.6)
+wander_seed = 35
+
+[node name="GreenBear36" parent="." instance=ExtResource("3_green")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.8, 0, -2.1)
+wander_seed = 36
+
 [node name="Round" type="Node" parent="."]
 script = ExtResource("5_round")
