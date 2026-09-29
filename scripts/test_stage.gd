@@ -63,9 +63,8 @@ const MAX_IDLE_YAW := 0.05
 ## A full move_right press must bring the bear near its 2.5 m/s top speed
 ## before release (gummy lag makes it approach asymptotically).
 const MIN_DRIVE_SPEED := 2.2
-## Hold the right stick up-right briefly: yaw must follow the mouse
-## convention (right orbits right, yaw falls) while pitch is inverted (stick
-## up tilts the view down, arm pitch falls — the mouse raises it).
+## Hold the right stick up-right briefly: both axes must follow the mouse
+## convention (right orbits right, yaw falls; up looks up, arm pitch rises).
 const LOOK_AT := 2.92
 const LOOK_END := 3.0
 ## Then a throw: one green bear is teleported THROW_TARGET_DISTANCE ahead
@@ -448,8 +447,8 @@ func _finish() -> void:
 	else:
 		if look_delta.x >= 0.0:
 			failures.append("look_right changed yaw by %+.3f rad (want < 0)" % look_delta.x)
-		if look_delta.y >= 0.0:
-			failures.append("look_up changed pitch by %+.3f rad (want < 0, inverted)" % look_delta.y)
+		if look_delta.y <= 0.0:
+			failures.append("look_up changed pitch by %+.3f rad (want > 0)" % look_delta.y)
 	_validate_throw(failures)
 	_validate_win(failures)
 	for window: String in SILHOUETTE_LIMITS:

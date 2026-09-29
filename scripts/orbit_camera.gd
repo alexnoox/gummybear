@@ -6,8 +6,8 @@ extends Node3D
 ## rig's yaw) never compounds with mouse look; every rendered frame it snaps
 ## to the bear's interpolated position, with automatic interpolation off, so
 ## mouse look stays frame-rate steady. The rig is crisp on purpose: all the
-## gummy lag lives in the body's velocity/yaw lerps. The stick's up/down is
-## inverted (push up to look down); the mouse's is not. Esc toggles cursor
+## gummy lag lives in the body's velocity/yaw lerps. Stick and mouse agree:
+## push up (or move the mouse up) to look up. Esc toggles cursor
 ## capture (a left click recaptures without throwing), the wheel zooms the spring arm,
 ## pitch is clamped so the camera neither dives under the stage nor flips
 ## over the bear.
@@ -62,8 +62,8 @@ func _process(delta: float) -> void:
 	# with the cursor free: the pad never needs mouse capture.
 	var look := Input.get_vector("look_left", "look_right", "look_up", "look_down")
 	rotation.y -= look.x * STICK_SPEED * delta
-	# Inverted: stick up (look.y < 0) lowers pitch, the opposite of mouse up.
-	_arm.rotation.x = clampf(_arm.rotation.x + look.y * STICK_SPEED * delta,
+	# Stick up (look.y < 0) raises pitch, like moving the mouse up.
+	_arm.rotation.x = clampf(_arm.rotation.x - look.y * STICK_SPEED * delta,
 			PITCH_MIN, PITCH_MAX)
 	_snap_to_body()
 

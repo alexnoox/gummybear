@@ -19,7 +19,7 @@ Godot drives with a code-built locomotion blend tree under a mouse-orbit camera.
 | WASD  | Left stick | Walk (forward / back / strafe); the stick is analog, up to 2.5 m/s |
 | Space | A | Jump (grounded only, no double jump) |
 | Left click | Right trigger | Throw a ball along the camera (every 0.3 s; aim assist bends it toward the green bear under the yellow arrow) |
-| Mouse | Right stick | Orbit camera (bear turns to follow while walking); the stick's up/down is inverted |
+| Mouse | Right stick | Orbit camera (bear turns to follow while walking); push up to look up |
 | Wheel | — | Zoom |
 | Esc   | — | Release / recapture mouse (a left click also recaptures, without throwing) |
 | Enter / Space / click | A | Restart, once every green bear is down and the round button shows |
