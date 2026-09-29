@@ -79,6 +79,10 @@ renders/            README hero render
   then its `next_pass` (`shaders/gummy.gdshader`, `render_priority = 1` so it
   draws after the depth pass) shades only the front-most surface, with a
   per-instance colour parameter (the player is cherry red, green bears lime).
+  Each bear owns a copy of the two passes, and every frame the bears are
+  sorted by camera distance into consecutive `render_priority` pairs, so
+  each draws depth then colour back to front. With one shared material, all
+  the depth passes drew first and a bear hid the bears behind it.
 
 ## Running
 
@@ -90,6 +94,7 @@ screenshots to `.dev/` and validates the jump contract, the idle/walk
 silhouettes, top speed, stick look direction, that an idle bear doesn't turn
 when the camera orbits, that a throw knocks a green bear down, turns the
 idle player to face it, and keeps the ragdoll on the stage, and that
+a green bear behind the translucent player still draws (draw order), and that
 knocking every bear down wins the round with fireworks and a focused restart
 button; the harness ignores the real mouse while it runs):
 

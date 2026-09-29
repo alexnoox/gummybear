@@ -6,7 +6,8 @@ extends CharacterBody3D
 ## the gummy-lag velocity lerp, `move_and_slide()`, and feeds a code-built
 ## AnimationTree (a BlendSpace2D of idle + 4 directional walk loops, then a
 ## TimeScale) with body-local velocity. `knock()` flops the bear into a
-## code-built ragdoll that stays down.
+## code-built ragdoll that stays down. Every frame the bears are re-sorted
+## by camera distance so each one's translucent gummy draws back to front.
 
 ## Ground speed at which the walk clips play at 1×. The clips' authored
 ## strides are slower (fwd 0.447 m/s, back 0.362, strafe 0.142), so they
@@ -89,6 +90,11 @@ var _tree: AnimationTree
 var _skeleton: Skeleton3D
 var _ragdoll: PhysicalBoneSimulator3D
 var _down := false
+var _depth_pass: ShaderMaterial
+var _colour_pass: ShaderMaterial
+
+## The Engine process frame the bears were last sorted on (shared by all).
+static var _sorted_frame := -1
 
 
 func _ready() -> void:
@@ -99,8 +105,15 @@ func _ready() -> void:
 		push_error("GummyBear: no MeshInstance3D found under Model")
 	else:
 		_mesh = meshes[0]
-		_mesh.material_override = GUMMY_MATERIAL
+		# Each bear owns its pair of passes (sharing the shaders) so its
+		# draw order can be set on its own; see _sort_draw_order().
+		_depth_pass = GUMMY_MATERIAL.duplicate()
+		_colour_pass = GUMMY_MATERIAL.next_pass.duplicate()
+		_depth_pass.next_pass = _colour_pass
+		_mesh.material_override = _depth_pass
 		_mesh.set_instance_shader_parameter("gummy_color", colour)
+
+	add_to_group("gummy_bears")
 
 	var skeletons := model.find_children("*", "Skeleton3D", true, false)
 	if not skeletons.is_empty():
@@ -205,6 +218,54 @@ func _physics_process(delta: float) -> void:
 		var stride := Vector2(local.x, local.z) / STRIDE_SPEED
 		_tree.set("parameters/locomotion/blend_position", stride.limit_length(1.0))
 		_tree.set("parameters/speed/scale", maxf(1.0, stride.length()))
+
+
+func _process(_delta: float) -> void:
+	_sort_draw_order()
+
+
+## Both gummy passes are transparent, and Godot draws transparent objects in
+## render_priority order before depth. With one shared material every bear's
+## depth-only pass drew before every bear's colour pass, so a near bear's
+## depth hid the bears behind it (they vanished through its translucency).
+## Instead each bear gets two consecutive priorities, farthest from the
+## camera lowest: every bear draws depth then colour, back to front. Done
+## once per frame for all bears, by whichever bear processes first.
+func _sort_draw_order() -> void:
+	var frame := Engine.get_process_frames()
+	if _sorted_frame == frame:
+		return
+	_sorted_frame = frame
+	var camera := get_viewport().get_camera_3d()
+	if camera == null:
+		return
+	var eye := camera.global_position
+	var bears := get_tree().get_nodes_in_group("gummy_bears")
+	bears.sort_custom(func(a: Node, b: Node) -> bool:
+		return a.call("draw_distance", eye) > b.call("draw_distance", eye))
+	for i in bears.size():
+		bears[i].call("set_draw_slot", i)
+
+
+## Distance from `eye` to where this bear is drawn: its ragdoll's body once
+## knocked down (the CharacterBody3D stays behind), its middle otherwise.
+func draw_distance(eye: Vector3) -> float:
+	var centre := global_position + Vector3.UP * 0.5
+	if _down:
+		for bone: PhysicalBone3D in ragdoll_bones():
+			if bone.bone_name == "body":
+				centre = bone.global_position
+	return eye.distance_to(centre)
+
+
+## Slot 0 draws first. 128 slots fit Godot's render_priority range.
+func set_draw_slot(slot: int) -> void:
+	if _depth_pass == null:
+		return
+	var priority := mini(Material.RENDER_PRIORITY_MIN + 2 * slot,
+			Material.RENDER_PRIORITY_MAX - 1)
+	_depth_pass.render_priority = priority
+	_colour_pass.render_priority = priority + 1
 
 
 func is_down() -> bool:

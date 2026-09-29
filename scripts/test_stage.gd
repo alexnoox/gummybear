@@ -17,6 +17,7 @@ const SHOT_SCHEDULE := {
 	2.70: "side.png",
 	3.30: "throw.png",
 	4.00: "knock.png",
+	4.45: "seethrough.png",
 	6.60: "fireworks.png",
 	9.40: "restart.png",
 }
@@ -81,6 +82,13 @@ const MAX_THROW_TURN_ERROR := 0.25
 const MAX_PLAYER_DRIFT := 0.05
 const STAGE_HALF_EXTENT := 10.0
 const STAGE_MIN_Y := -0.3
+## Then see-through: a standing green bear is put SEETHROUGH_DISTANCE behind
+## the player along the camera. The translucent red bear must not hide it:
+## the green bear's colour pass has to draw before the red bear's depth-only
+## pass, whose depth would otherwise mask everything behind it.
+const SEETHROUGH_AT := 4.3
+const SEETHROUGH_CHECK_AT := 4.45
+const SEETHROUGH_DISTANCE := 1.2
 ## Then the win: the harness knocks the remaining green bears down itself.
 ## The round must be won at once, fireworks must go up, and the restart
 ## button must be showing, focused (so A presses it) and clickable (mouse
@@ -129,6 +137,8 @@ var _throw_yaw := 0.0
 var _player_start := Vector3.ZERO
 var _knocked_after := -1.0
 var _turn_error := -1.0
+var _behind: Node3D
+var _seethrough_order := ""
 var _win_forced := false
 var _won_after := -1.0
 
@@ -230,6 +240,12 @@ func _physics_process(delta: float) -> void:
 	if _throw_pressed and _turn_error < 0.0 and _elapsed >= TURN_CHECK_AT:
 		_turn_error = absf(angle_difference(_throw_yaw, _bear.rotation.y))
 
+	if _behind == null and _elapsed >= SEETHROUGH_AT:
+		_place_behind_player()
+	if (_behind != null and _seethrough_order.is_empty()
+			and _elapsed >= SEETHROUGH_CHECK_AT):
+		_seethrough_order = _draw_order_check()
+
 	if not _win_forced and _elapsed >= WIN_AT:
 		for green: Node in get_tree().get_nodes_in_group("green_bears"):
 			green.call("knock", Vector3(0.0, 0.0, -1.0))
@@ -281,6 +297,45 @@ func _setup_throw_target() -> void:
 			+ forward * THROW_TARGET_DISTANCE)
 	_target.velocity = Vector3.ZERO
 	_target.reset_physics_interpolation()
+
+
+## Puts the second green bear right behind the player, from the camera.
+func _place_behind_player() -> void:
+	var greens := get_tree().get_nodes_in_group("green_bears")
+	if greens.size() < 2:
+		_behind = self  # nothing to place; the check below reports it
+		return
+	_behind = greens[1]
+	var yaw: float = _look_angles().x
+	var forward := Vector3(-sin(yaw), 0.0, -cos(yaw))
+	_behind.global_position = _bear.global_position + forward * SEETHROUGH_DISTANCE
+	(_behind as CharacterBody3D).velocity = Vector3.ZERO
+	_behind.reset_physics_interpolation()
+
+
+## "ok", or why the red bear's passes would hide the green bear behind it.
+func _draw_order_check() -> String:
+	if not _behind.has_method("is_down"):
+		return "no second green bear to put behind the player"
+	var red := _gummy_passes(_bear)
+	var green := _gummy_passes(_behind)
+	if red.is_empty() or green.is_empty():
+		return "a bear has no two-pass gummy material"
+	if green[1] >= red[0]:
+		return ("green colour pass (priority %d) doesn't draw before the red depth pass (%d)"
+				% [green[1], red[0]])
+	return "ok"
+
+
+## [depth pass priority, colour pass priority] of a bear's gummy material.
+func _gummy_passes(bear: Node) -> Array[int]:
+	var meshes := bear.get_node("Model").find_children("*", "MeshInstance3D", true, false)
+	if meshes.is_empty():
+		return []
+	var depth := (meshes[0] as MeshInstance3D).material_override
+	if depth == null or depth.next_pass == null:
+		return []
+	return [depth.render_priority, depth.next_pass.render_priority]
 
 
 ## (rig yaw, arm pitch) in radians.
@@ -450,6 +505,10 @@ func _finish() -> void:
 		if look_delta.y <= 0.0:
 			failures.append("look_up changed pitch by %+.3f rad (want > 0)" % look_delta.y)
 	_validate_throw(failures)
+	if _seethrough_order.is_empty():
+		failures.append("see-through draw order was never checked")
+	elif _seethrough_order != "ok":
+		failures.append(_seethrough_order)
 	_validate_win(failures)
 	for window: String in SILHOUETTE_LIMITS:
 		_validate_silhouette(window, failures)

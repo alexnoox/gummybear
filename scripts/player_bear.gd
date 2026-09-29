@@ -92,7 +92,8 @@ func _physics_process(delta: float) -> void:
 		_throw()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	super(delta)
 	var show := _aim_target != null and not _aim_target.is_down()
 	_marker.visible = show
 	if show:
