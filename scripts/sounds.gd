@@ -2,9 +2,17 @@ extends Node
 
 ## Sound effects the players record themselves (pause menu → Sounds). Each
 ## game moment in EVENTS plays its recording, if it has one, at a slightly
-## random pitch so repeats don't sound robotic. Recordings are WAV files in
-## the user data folder (user://sounds/<event>.wav), so they survive a
-## restart. An autoload: anything can call `Sounds.play("throw")`.
+## random pitch so repeats don't sound robotic. An autoload: anything can
+## call `Sounds.play("throw")`.
+##
+## Two layers of WAV files, <event>.wav, the first found wins:
+## 1. This computer's own recordings, in `directory`.
+## 2. The project's PROJECT_DIR (res://sounds, tracked in git), which every
+##    build ships, so the Windows PC by the TV gets the Mac's recordings.
+## Run from the project source (the Mac), `directory` *is* PROJECT_DIR:
+## recordings land in the repo and go out on the next push. In an exported
+## build (the PC) it's user://sounds: the PC's own recordings win there,
+## and clearing one falls back to the shipped one.
 ##
 ## Recording uses Godot's microphone path: an AudioStreamMicrophone playing
 ## into a muted "Record" bus whose AudioEffectRecord captures it (needs
@@ -25,7 +33,13 @@ const NO_OVERLAP := ["walk"]
 const VOICES := 8
 const RECORD_BUS := "Record"
 
-var directory := "user://sounds"
+## Recordings shipped with the game (imported by Godot, so a build carries
+## them).
+const PROJECT_DIR := "res://sounds"
+const USER_DIR := "user://sounds"
+
+## Where this computer's recordings are written and read first.
+var directory := PROJECT_DIR if OS.has_feature("editor") else USER_DIR
 
 var _streams := {}
 var _plays := {}
@@ -70,15 +84,48 @@ func use_directory(path: String) -> void:
 func load_all() -> void:
 	_streams.clear()
 	for event: String in EVENTS:
-		var path := _path(event)
-		if FileAccess.file_exists(path):
-			var wav := AudioStreamWAV.load_from_file(path)
-			if wav != null:
-				_streams[event] = wav
+		_load_event(event)
+
+
+func _load_event(event: String) -> void:
+	_streams.erase(event)
+	var wav := _load_wav(_path(event))
+	if wav == null:
+		wav = _load_wav("%s/%s.wav" % [PROJECT_DIR, event])
+	if wav != null:
+		_streams[event] = wav
+
+
+## The WAV at `path`: read straight from the file when it's there (user://,
+## or res:// run from source, which may be newer than Godot's import of it),
+## else Godot's imported copy (res:// in an exported build).
+func _load_wav(path: String) -> AudioStreamWAV:
+	if FileAccess.file_exists(path):
+		return AudioStreamWAV.load_from_file(path)
+	if path.begins_with("res://") and ResourceLoader.exists(path):
+		return load(path) as AudioStreamWAV
+	return null
 
 
 func has_sound(event: String) -> bool:
 	return _streams.has(event)
+
+
+## True if this computer recorded `event` itself (so Clear has something to
+## clear); false for a sound that only ships with the game.
+func has_own_sound(event: String) -> bool:
+	return FileAccess.file_exists(_path(event))
+
+
+## The events that have a recording shipped with the game.
+func shipped_events() -> Array:
+	return EVENTS.filter(func(event: String) -> bool:
+		return _load_wav("%s/%s.wav" % [PROJECT_DIR, event]) != null)
+
+
+## True when recordings go into the project (run from source on the Mac).
+func records_into_project() -> bool:
+	return directory == PROJECT_DIR
 
 
 ## Plays `event`'s recording, if any; `jitter` varies the pitch a little.
@@ -109,11 +156,14 @@ func set_sound(event: String, wav: AudioStreamWAV) -> bool:
 	return wav.save_to_wav(_path(event)) == OK
 
 
+## Deletes this computer's recording of `event`; a shipped one (if any)
+## takes over again.
 func clear(event: String) -> void:
-	_streams.erase(event)
 	var path := _path(event)
-	if FileAccess.file_exists(path):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	for file in [path, path + ".import"]:
+		if FileAccess.file_exists(file):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(file))
+	_load_event(event)
 
 
 func is_recording() -> bool:

@@ -112,7 +112,9 @@ const SETTINGS_PATH := "user://settings.cfg"
 ## event a short synthetic beep, kept in its own folder (the player's
 ## recordings are left alone) with the speakers muted, and asserts each
 ## event's sound played during the run: throw, hit (the knock), pop (the
-## ball after its bounces), win, and walk (footsteps while driving).
+## ball after its bounces), win, and walk (footsteps while driving). Then,
+## with its beeps cleared, every event must fall back to the recording
+## shipped in res://sounds when there is one, and be silent when not.
 const SOUND_EVENTS := ["throw", "hit", "pop", "win", "walk"]
 const HARNESS_SOUND_DIR := "user://harness_sounds"
 const JOY_A := 0
@@ -166,6 +168,7 @@ var _seethrough_order := ""
 var _menu_step := 0
 var _menu_failures: Array[String] = []
 var _menu_invert_before := false
+var _shipped_sounds: Array = []
 var _settings_backup: PackedByteArray
 var _settings_existed := false
 var _win_forced := false
@@ -187,6 +190,8 @@ func _ready() -> void:
 	if _settings_existed:
 		_settings_backup = FileAccess.get_file_as_bytes(SETTINGS_PATH)
 	AudioServer.set_bus_mute(AudioServer.get_bus_index("Master"), true)
+	_shipped_sounds = Sounds.shipped_events()
+	print("[test_stage] shipped sounds: %s" % [", ".join(_shipped_sounds)])
 	Sounds.use_directory(HARNESS_SOUND_DIR)
 	for event: String in SOUND_EVENTS:
 		Sounds.set_sound(event, _beep())
@@ -473,6 +478,10 @@ func _validate_sounds(failures: Array[String]) -> void:
 		if plays == 0:
 			failures.append("the %s sound never played" % event)
 		Sounds.clear(event)
+		if Sounds.has_sound(event) != _shipped_sounds.has(event):
+			failures.append("after clearing, %s %s" % [event,
+					"lost its shipped sound" if _shipped_sounds.has(event)
+					else "still has a sound"])
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(HARNESS_SOUND_DIR))
 	print("[test_stage] sounds %s" % " ".join(counts))
 

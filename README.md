@@ -21,7 +21,7 @@ Godot drives with a code-built locomotion blend tree under a mouse-orbit camera.
 | Left click | A or right trigger | Throw a ball along the camera (every 0.3 s; aim assist bends it toward the green bear under the yellow arrow) |
 | Mouse | Right stick | Orbit camera (bear turns to follow while walking); push up to look up |
 | Wheel | — | Zoom |
-| Esc | Menu (Start) | Pause menu: invert the right stick's up/down (saved to `user://settings.cfg`), and **Sounds**: record your own sound for throw, hit, ball pop, win and walk (hold Record, up to 3 s; saved as `user://sounds/<event>.wav`). Esc, Menu, B or Resume closes it (B on the Sounds page goes back). A left click recaptures the mouse without throwing |
+| Esc | Menu (Start) | Pause menu: invert the right stick's up/down (saved to `user://settings.cfg`), and **Sounds**: record your own sound for throw, hit, ball pop, win and walk (hold Record, up to 3 s). On the Mac (run from the project) recordings go into the repo's `sounds/` folder, so the next push ships them to the Windows PC; there they can be overridden by recording on the PC (`user://sounds`), and Clear brings the shipped one back. Esc, Menu, B or Resume closes it (B on the Sounds page goes back). A left click recaptures the mouse without throwing |
 | Enter / Space / click | A | Restart, once every green bear is down and the round button shows |
 
 ## Layout
@@ -77,7 +77,8 @@ renders/            README hero render
   reloads the stage.
 - `sounds.gd` is an autoload (`Sounds`). Each game moment (throw, hit, ball
   pop, win, and the red bear's footsteps) plays its recording, if any, at
-  ±10% pitch. Recording uses Godot's microphone path: an
+  ±10% pitch: this computer's own recording first, else the one shipped in
+  `sounds/` (recorded on the Mac, committed, imported into every build). Recording uses Godot's microphone path: an
   `AudioStreamMicrophone` into a muted "Record" bus with an
   `AudioEffectRecord` (`audio/driver/enable_input` is on). macOS asks for
   microphone permission the first time, on behalf of the app that launched

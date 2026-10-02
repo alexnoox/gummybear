@@ -6,7 +6,8 @@ extends CanvasLayer
 ## camera's invert toggle (right stick up/down), saved (settings.gd) so it
 ## sticks, and a Sounds button. The Sounds page has one row per game sound
 ## (sounds.gd): hold Record (A on the pad, or click and hold) to record up
-## to 3 s, which then plays back; Play and Clear. B goes back. The D-pad or
+## to 3 s, which then plays back; Play, and Clear (this computer's own
+## recording; a sound shipped with the game comes back). B goes back. The D-pad or
 ## left stick moves between buttons and A presses. F11 or Alt+Enter switches
 ## between full screen and a window at any time (exported builds start full
 ## screen: project.godot's window/size/mode.template).
@@ -205,9 +206,8 @@ func _show_sounds() -> void:
 
 func _refresh_sounds() -> void:
 	for event: String in _sound_buttons:
-		var has := Sounds.has_sound(event)
-		_sound_buttons[event][1].disabled = not has
-		_sound_buttons[event][2].disabled = not has
+		_sound_buttons[event][1].disabled = not Sounds.has_sound(event)
+		_sound_buttons[event][2].disabled = not Sounds.has_own_sound(event)
 
 
 func _on_record_down(event: String, label: String) -> void:
@@ -218,7 +218,8 @@ func _on_record_down(event: String, label: String) -> void:
 func _on_recorded(event: String, ok: bool) -> void:
 	_refresh_sounds()
 	if ok:
-		_status.text = "Got it!"
+		_status.text = ("Got it! Saved in the project: push to send it to the TV."
+				if Sounds.records_into_project() else "Got it!")
 		Sounds.play(event, false)
 	else:
 		_status.text = "Nothing came in. Check the microphone (System Settings → Privacy → Microphone)."
@@ -226,7 +227,8 @@ func _on_recorded(event: String, ok: bool) -> void:
 
 func _on_clear(event: String) -> void:
 	Sounds.clear(event)
-	_status.text = ""
+	_status.text = ("Cleared; the game's own %s sound is back." % event
+			if Sounds.has_sound(event) else "")
 	_refresh_sounds()
 	# The Clear button just disabled itself; keep focus on the row.
 	(_sound_buttons[event][0] as Button).grab_focus()
