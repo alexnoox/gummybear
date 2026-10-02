@@ -19,12 +19,17 @@ Invoke-WebRequest -UseBasicParsing -OutFile $Launcher `
 $shell = New-Object -ComObject WScript.Shell
 $desktop = [Environment]::GetFolderPath('Desktop')
 $shortcut = $shell.CreateShortcut((Join-Path $desktop 'Gummy Bear.lnk'))
-$shortcut.TargetPath = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-$shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$Launcher`""
+# Windows blocks .ps1 files by default (the Restricted execution policy), so
+# both the shortcut and the first run below start the launcher through
+# powershell.exe with the policy bypassed for that one process only.
+$PowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+$LauncherArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$Launcher`""
+$shortcut.TargetPath = $PowerShell
+$shortcut.Arguments = $LauncherArgs
 $shortcut.WorkingDirectory = $InstallDir
 # The game's own icon, once the first run has downloaded it.
 $shortcut.IconLocation = "$(Join-Path $InstallDir 'GummyBear.exe'),0"
 $shortcut.Save()
 Write-Host "Installed. The 'Gummy Bear' shortcut on the desktop gets the newest version and plays it."
 
-& $Launcher
+Start-Process -FilePath $PowerShell -ArgumentList $LauncherArgs -WorkingDirectory $InstallDir -NoNewWindow -Wait
