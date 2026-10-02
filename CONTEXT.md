@@ -51,3 +51,7 @@ _Avoid_: Options screen, settings screen
 **Sound effect**:
 A sound the players record themselves for one game moment (throw, hit, ball pop, win, walk) on the pause menu's Sounds page. A moment with no recording is silent.
 _Avoid_: SFX, audio clip, sample
+
+**Jenga stack**:
+One of the three towers of loose blue blocks on the stage. Balls, bears and flopping ragdolls knock them about; they only stand back up when the round restarts. Not a target: knocking them over doesn't count toward winning.
+_Avoid_: Tower (alone), blocks, obstacle

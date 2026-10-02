@@ -35,7 +35,7 @@ func _init() -> void:
 	mass = 0.4
 	collision_layer = GUMMY_BEAR.LAYER_BALLS
 	collision_mask = (GUMMY_BEAR.LAYER_WORLD | GUMMY_BEAR.LAYER_BEARS
-			| GUMMY_BEAR.LAYER_RAGDOLLS)
+			| GUMMY_BEAR.LAYER_RAGDOLLS | GUMMY_BEAR.LAYER_PROPS)
 	continuous_cd = true
 	contact_monitor = true
 	max_contacts_reported = 4

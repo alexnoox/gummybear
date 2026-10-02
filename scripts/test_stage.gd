@@ -22,6 +22,7 @@ const SHOT_SCHEDULE := {
 	9.40: "restart.png",
 	9.60: "menu.png",
 	10.20: "sounds.png",
+	11.30: "jenga.png",
 }
 ## seconds -> silhouette window sampled after the frame is drawn
 const SILHOUETTE_SCHEDULE := {
@@ -56,7 +57,7 @@ const AIR_DRIVE_START := 0.55
 const AIR_DRIVE_END := 0.75
 const DRIVE_START := 1.6
 const DRIVE_END := 2.4
-const QUIT_AT := 10.6
+const QUIT_AT := 12.4
 ## After all world-axis checks, orbit the idle bear's camera a quarter turn:
 ## the body must stay put (no turn-in-place clip exists), and side.png shows
 ## the bear side-on for the shader's self-overlap check.
@@ -114,6 +115,24 @@ const JOY_DPAD_RIGHT := 14
 ## The harness always plays with this many green bears, whatever the
 ## player's saved setting; first it checks the spawner by asking for 3.
 const HARNESS_BEARS := 15
+## Jenga stacks: untouched, no block may have moved JENGA_STILL by
+## JENGA_STILL_AT. After the menu, the player is put JENGA_PUSH_GAP in front
+## of stack 0 and walks into it for JENGA_PUSH_TIME, and a ball is launched
+## at stack 1's upper third (JENGA_BALL_HEIGHT). By JENGA_CHECK_AT the
+## walked-into stack must have at least JENGA_MIN_PUSHED blocks knocked
+## JENGA_MOVED out of place, and the hit one at least JENGA_MIN_HIT (a ball
+## punches a block out, like real Jenga, rather than felling the tower).
+const JENGA_STILL_AT := 2.0
+const JENGA_STILL := 0.02
+const JENGA_AT := 10.7
+const JENGA_PUSH_GAP := 1.0
+const JENGA_PUSH_TIME := 1.0
+const JENGA_BALL_SPEED := 8.0
+const JENGA_BALL_HEIGHT := 0.9
+const JENGA_CHECK_AT := 12.2
+const JENGA_MOVED := 0.1
+const JENGA_MIN_PUSHED := 3
+const JENGA_MIN_HIT := 1
 const SETTINGS_PATH := "user://settings.cfg"
 ## Recorded sounds: the harness can't use a microphone, so it gives every
 ## event a short synthetic beep, kept in its own folder (the player's
@@ -185,6 +204,13 @@ var _menu_invert_before := false
 var _shipped_sounds: Array = []
 var _trim_failure := ""
 var _spawn_failure := ""
+var _drift_after_throw := -1.0
+var _jenga_still_moved := -1
+var _jenga_started := false
+var _jenga_push_released := false
+var _jenga_checked := false
+var _jenga_pushed := -1
+var _jenga_hit := -1
 ## Counts harness starts across scene reloads: a second start means the
 ## round restarted mid-run (nothing in the run should restart it).
 static var _starts := 0
@@ -309,6 +335,11 @@ func _physics_process(delta: float) -> void:
 	if _throw_pressed and _turn_error < 0.0 and _elapsed >= TURN_CHECK_AT:
 		_turn_error = absf(angle_difference(_throw_yaw, _bear.rotation.y))
 
+	if _drift_after_throw < 0.0 and _throw_pressed and _elapsed >= SEETHROUGH_AT:
+		var drift := _bear.global_position - _player_start
+		drift.y = 0.0
+		_drift_after_throw = drift.length()
+	_run_jenga_checks()
 	if _behind == null and _elapsed >= SEETHROUGH_AT:
 		_place_behind_player()
 	if (_behind != null and _seethrough_order.is_empty()
@@ -516,6 +547,58 @@ func _check_spawn() -> String:
 	return problem
 
 
+func _run_jenga_checks() -> void:
+	var jenga := get_node_or_null("JengaStacks")
+	if jenga == null or not jenga.has_method("blocks_moved"):
+		return
+	if _jenga_still_moved < 0 and _elapsed >= JENGA_STILL_AT:
+		_jenga_still_moved = 0
+		for stack in jenga.call("stack_count"):
+			_jenga_still_moved += jenga.call("blocks_moved", stack, JENGA_STILL)
+	if not _jenga_started and _elapsed >= JENGA_AT:
+		_jenga_started = true
+		# Walk the player into stack 0 from the +Z side, camera facing -Z.
+		var spot: Vector3 = jenga.call("stack_position", 0)
+		_bear.global_position = spot + Vector3(0.0, 0.0, JENGA_PUSH_GAP)
+		_bear.velocity = Vector3.ZERO
+		_bear.reset_physics_interpolation()
+		_bear.get_node("CameraRig").rotation.y = 0.0
+		Input.action_press("move_forward")
+		# And throw a ball at stack 1's upper third from 2 m in front of it.
+		var target: Vector3 = jenga.call("stack_position", 1) + Vector3.UP * JENGA_BALL_HEIGHT
+		var ball: RigidBody3D = load("res://scripts/ball.gd").new()
+		add_child(ball)
+		ball.global_position = target + Vector3(0.0, 0.0, 2.0)
+		ball.linear_velocity = Vector3(0.0, 0.0, -JENGA_BALL_SPEED)
+		ball.reset_physics_interpolation()
+	if (_jenga_started and not _jenga_push_released
+			and _elapsed >= JENGA_AT + JENGA_PUSH_TIME):
+		_jenga_push_released = true
+		Input.action_release("move_forward")
+	if not _jenga_checked and _elapsed >= JENGA_CHECK_AT:
+		_jenga_checked = true
+		_jenga_pushed = jenga.call("blocks_moved", 0, JENGA_MOVED)
+		_jenga_hit = jenga.call("blocks_moved", 1, JENGA_MOVED)
+
+
+func _validate_jenga(failures: Array[String]) -> void:
+	var jenga := get_node_or_null("JengaStacks")
+	if jenga == null or not jenga.has_method("blocks_moved"):
+		failures.append("no JengaStacks with blocks_moved()")
+		return
+	print("[test_stage] jenga stacks=%d blocks=%d still_moved=%d pushed=%d hit=%d" %
+			[jenga.call("stack_count"), jenga.call("block_count"),
+			_jenga_still_moved, _jenga_pushed, _jenga_hit])
+	if jenga.call("stack_count") != 3:
+		failures.append("want 3 Jenga stacks, got %d" % jenga.call("stack_count"))
+	if _jenga_still_moved != 0:
+		failures.append("%d Jenga blocks moved before anything touched them" % _jenga_still_moved)
+	if _jenga_pushed < JENGA_MIN_PUSHED:
+		failures.append("walking into a stack knocked only %d blocks" % _jenga_pushed)
+	if _jenga_hit < JENGA_MIN_HIT:
+		failures.append("a ball into a stack knocked only %d blocks" % _jenga_hit)
+
+
 ## "" if trimming a padded recording works, else what went wrong.
 func _check_trim() -> String:
 	if not Sounds.has_method("trim_silence"):
@@ -688,16 +771,16 @@ func _validate_throw(failures: Array[String]) -> void:
 		failures.append("green bear has no ragdoll bones")
 	elif off_stage > 0:
 		failures.append("%d ragdoll bones left the stage" % off_stage)
-	var drift := _bear.global_position - _player_start
-	drift.y = 0.0
-	if drift.length() > MAX_PLAYER_DRIFT:
-		failures.append("player drifted %.3f m during the throw" % drift.length())
+	if _drift_after_throw < 0.0:
+		failures.append("player drift after the throw was never measured")
+	elif _drift_after_throw > MAX_PLAYER_DRIFT:
+		failures.append("player drifted %.3f m during the throw" % _drift_after_throw)
 	if _turn_error < 0.0:
 		failures.append("throw turn was never checked")
 	elif _turn_error > MAX_THROW_TURN_ERROR:
 		failures.append("idle player is %.3f rad off the throw direction" % _turn_error)
 	print("[test_stage] knocked_after=%.2f turn_error=%.3f drift=%.3f ragdoll_off_stage=%d" %
-			[_knocked_after, _turn_error, drift.length(), off_stage])
+			[_knocked_after, _turn_error, _drift_after_throw, off_stage])
 
 
 func _validate_win(failures: Array[String]) -> void:
@@ -731,6 +814,7 @@ func _finish() -> void:
 	Input.action_release("look_right")
 	Input.action_release("look_up")
 	Input.action_release("throw")
+	Input.action_release("move_forward")
 	var look_delta := _look_delta
 	var rise := _apex_y - _start_y
 	var failures: Array[String] = []
@@ -761,6 +845,7 @@ func _finish() -> void:
 		if look_delta.y <= 0.0:
 			failures.append("look_up changed pitch by %+.3f rad (want > 0)" % look_delta.y)
 	_validate_throw(failures)
+	_validate_jenga(failures)
 	if _seethrough_order.is_empty():
 		failures.append("see-through draw order was never checked")
 	elif _seethrough_order != "ok":

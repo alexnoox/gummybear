@@ -40,6 +40,7 @@ scripts/            gummy_bear.gd (shared body, ragdoll), player_bear.gd (input,
                     round.gd (win, restart), fireworks.gd, restart_button.gd,
                     pause_menu.gd, settings.gd (saved menu settings),
                     green_bear_spawner.gd (places the green bears),
+                    jenga_stacks.gd (three physics towers of blue blocks),
                     sounds.gd (autoload: recorded sound effects),
                     test_stage.gd (dev harness)
 shaders/            gummy_depth.gdshader (depth pre-pass), gummy.gdshader
@@ -72,6 +73,11 @@ renders/            README hero render
   the hit, then simulate. Jolt needs explicit collision exceptions between a
   bear's own bones, and a `ScaleFix` modifier undoes the rig's 0.333 scale
   leaking into the simulated bones.
+- `jenga_stacks.gd` builds three towers of blue Jenga blocks, each block a
+  `RigidBody3D` that starts asleep. A ball knocks blocks out; a bear
+  bulldozes a tower: every bear carries an `AnimatableBody3D` copy of its
+  capsule (its pusher, on its own physics layer), because a
+  `CharacterBody3D` just stops at the first block it touches.
 - `round.gd` watches the green bears. When the last one goes down, the
   camera tilts up, `fireworks.gd` launches rockets either side of the view,
   and `restart_button.gd` pops up a word-free round button (a drawn ↻) that

@@ -1,8 +1,9 @@
-[gd_scene load_steps=13 format=3]
+[gd_scene load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://scripts/test_stage.gd" id="1_script"]
 [ext_resource type="PackedScene" path="res://scenes/player_bear.tscn" id="2_bear"]
 [ext_resource type="Script" path="res://scripts/green_bear_spawner.gd" id="3_spawner"]
+[ext_resource type="Script" path="res://scripts/jenga_stacks.gd" id="7_jenga"]
 [ext_resource type="Script" path="res://scripts/candy_fence.gd" id="4_fence"]
 [ext_resource type="Script" path="res://scripts/round.gd" id="5_round"]
 [ext_resource type="Script" path="res://scripts/pause_menu.gd" id="6_menu"]
@@ -52,6 +53,9 @@ environment = SubResource("Environment_stage")
 
 [node name="CandyFence" type="StaticBody3D" parent="."]
 script = ExtResource("4_fence")
+
+[node name="JengaStacks" type="Node3D" parent="."]
+script = ExtResource("7_jenga")
 
 [node name="GreenBears" type="Node3D" parent="."]
 script = ExtResource("3_spawner")

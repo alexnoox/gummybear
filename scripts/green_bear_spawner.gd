@@ -3,10 +3,11 @@ extends Node3D
 ## Puts the green bears on the stage: as many as the pause menu's saved
 ## "green_bears" setting (DEFAULT_COUNT until it's set), at spots inside the
 ## candy fence, at least CLEAR_OF_START from the player's start (so none
-## stand between the camera and the player as a round begins) and SPACING
-## apart. The spots come from a fixed seed, so a given count always gives
-## the same layout (and a bigger count only adds bears); bear i wanders with
-## seed i + 1.
+## stand between the camera and the player as a round begins), SPACING
+## apart, and clear of any "keep_clear" node's spots (the Jenga towers).
+## The spots come from a fixed seed, so a given count always gives the same
+## layout (and a bigger count only adds bears); bear i wanders with seed
+## i + 1.
 
 const GREEN_BEAR := preload("res://scenes/green_bear.tscn")
 const SETTINGS := preload("res://scripts/settings.gd")
@@ -39,7 +40,7 @@ func spawn(count: int) -> void:
 		# Out of the tree (and the green_bears group) at once.
 		remove_child(bear)
 		bear.queue_free()
-	var spots := _spots(clampi(count, MIN_COUNT, MAX_COUNT))
+	var spots := _spots(clampi(count, MIN_COUNT, MAX_COUNT), _keep_clear())
 	for i in spots.size():
 		var bear := GREEN_BEAR.instantiate()
 		bear.name = "GreenBear%d" % (i + 1)
@@ -48,7 +49,16 @@ func spawn(count: int) -> void:
 		add_child(bear)
 
 
-static func _spots(count: int) -> Array[Vector3]:
+## [spot, radius] pairs from the "keep_clear" group.
+func _keep_clear() -> Array:
+	var zones := []
+	for node in get_tree().get_nodes_in_group("keep_clear"):
+		for spot: Vector3 in node.call("keep_clear_spots"):
+			zones.append([spot, node.call("keep_clear_radius")])
+	return zones
+
+
+static func _spots(count: int, keep_clear: Array) -> Array[Vector3]:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = LAYOUT_SEED
 	var spots: Array[Vector3] = []
@@ -61,6 +71,9 @@ static func _spots(count: int) -> Array[Vector3]:
 		if Vector2(spot.x, spot.z).length() < CLEAR_OF_START:
 			continue
 		if spots.any(func(other: Vector3) -> bool: return other.distance_to(spot) < SPACING):
+			continue
+		if keep_clear.any(func(zone: Array) -> bool:
+				return (zone[0] as Vector3).distance_to(spot) < zone[1]):
 			continue
 		spots.append(spot)
 	return spots

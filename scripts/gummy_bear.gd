@@ -26,6 +26,9 @@ const LAYER_WORLD := 1
 const LAYER_BEARS := 2
 const LAYER_RAGDOLLS := 4
 const LAYER_BALLS := 8
+## Loose physics props (the Jenga blocks), and the bears' pushers.
+const LAYER_PROPS := 16
+const LAYER_PUSHERS := 32
 
 ## Knock: the whole ragdoll is launched at this speed along the ball's
 ## horizontal path, plus an upward pop, and the head gets an extra shove so
@@ -90,6 +93,7 @@ var _tree: AnimationTree
 var _skeleton: Skeleton3D
 var _ragdoll: PhysicalBoneSimulator3D
 var _down := false
+var _pusher: AnimatableBody3D
 var _depth_pass: ShaderMaterial
 var _colour_pass: ShaderMaterial
 
@@ -114,6 +118,7 @@ func _ready() -> void:
 		_mesh.set_instance_shader_parameter("gummy_color", colour)
 
 	add_to_group("gummy_bears")
+	_build_pusher()
 
 	var skeletons := model.find_children("*", "Skeleton3D", true, false)
 	if not skeletons.is_empty():
@@ -268,6 +273,27 @@ func set_draw_slot(slot: int) -> void:
 	_colour_pass.render_priority = priority + 1
 
 
+## Bears shove loose props (the Jenga blocks) by walking into them. A
+## CharacterBody3D would just stop at the first block it touched, so the
+## bear's own body ignores props and a kinematic AnimatableBody3D copy of
+## its capsule rides along on the pushers layer instead: the physics engine
+## shoves every block it runs into, like a bulldozer.
+func _build_pusher() -> void:
+	var capsule: CollisionShape3D = $CollisionShape3D
+	var shape := CollisionShape3D.new()
+	shape.shape = capsule.shape
+	shape.transform = capsule.transform
+	_pusher = AnimatableBody3D.new()
+	_pusher.name = "Pusher"
+	_pusher.collision_layer = LAYER_PUSHERS
+	_pusher.collision_mask = 0
+	# Follows the bear's transform; with sync_to_physics (the default) the
+	# body drives its own transform and stays put while the bear walks off.
+	_pusher.sync_to_physics = false
+	_pusher.add_child(shape)
+	add_child(_pusher)
+
+
 func is_down() -> bool:
 	return _down
 
@@ -344,6 +370,8 @@ func knock(hit_velocity: Vector3) -> void:
 	velocity = Vector3.ZERO
 	collision_layer = 0
 	$CollisionShape3D.set_deferred("disabled", true)
+	# The ragdoll does the shoving now.
+	_pusher.collision_layer = 0
 	# Godot #101823: with physics interpolation on, a ragdolled skeleton's
 	# mesh drifts away from its bones. Only while down: walking needs it.
 	_skeleton.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
@@ -352,7 +380,7 @@ func knock(hit_velocity: Vector3) -> void:
 	var launch := push * KNOCK_SPEED + Vector3.UP * KNOCK_POP
 	for bone: PhysicalBone3D in ragdoll_bones():
 		bone.collision_layer = LAYER_RAGDOLLS
-		bone.collision_mask = LAYER_WORLD | LAYER_RAGDOLLS
+		bone.collision_mask = LAYER_WORLD | LAYER_RAGDOLLS | LAYER_PROPS
 	_ragdoll.physical_bones_start_simulation()
 	# Impulses land in the same frame the simulation starts.
 	for bone: PhysicalBone3D in ragdoll_bones():
