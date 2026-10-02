@@ -21,7 +21,7 @@ Godot drives with a code-built locomotion blend tree under a mouse-orbit camera.
 | Left click | A or right trigger | Throw a ball along the camera (every 0.3 s; aim assist bends it toward the green bear under the yellow arrow) |
 | Mouse | Right stick | Orbit camera (bear turns to follow while walking); push up to look up |
 | Wheel | — | Zoom |
-| Esc | Menu (Start) | Pause menu: invert the right stick's up/down (saved to `user://settings.cfg`), and **Sounds**: record your own sound for throw, hit, ball pop, win and walk (hold Record, up to 3 s; the silence before and after the sound is trimmed off so it plays right on cue). On the Mac (run from the project) recordings go into the repo's `sounds/` folder, so the next push ships them to the Windows PC; there they can be overridden by recording on the PC (`user://sounds`), and Clear brings the shipped one back. Esc, Menu, B or Resume closes it (B on the Sounds page goes back). A left click recaptures the mouse without throwing |
+| Esc | Menu (Start) | Pause menu: invert the right stick's up/down, set how many green bears there are (1–40, left/right; the round restarts with the new number when the menu closes), both saved to `user://settings.cfg`, and **Sounds**: record your own sound for throw, hit, ball pop, win and walk (hold Record, up to 3 s; the silence before and after the sound is trimmed off so it plays right on cue). On the Mac (run from the project) recordings go into the repo's `sounds/` folder, so the next push ships them to the Windows PC; there they can be overridden by recording on the PC (`user://sounds`), and Clear brings the shipped one back. Esc, Menu, B or Resume closes it (B on the Sounds page goes back). A left click recaptures the mouse without throwing |
 | Enter / Space / click | A | Restart, once every green bear is down and the round button shows |
 
 ## Layout
@@ -38,7 +38,8 @@ scripts/            gummy_bear.gd (shared body, ragdoll), player_bear.gd (input,
                     throw, aim assist), green_bear.gd (wander/flee),
                     orbit_camera.gd (camera rig), ball.gd, candy_fence.gd,
                     round.gd (win, restart), fireworks.gd, restart_button.gd,
-                    pause_menu.gd, settings.gd (saved invert options),
+                    pause_menu.gd, settings.gd (saved menu settings),
+                    green_bear_spawner.gd (places the green bears),
                     sounds.gd (autoload: recorded sound effects),
                     test_stage.gd (dev harness)
 shaders/            gummy_depth.gdshader (depth pre-pass), gummy.gdshader

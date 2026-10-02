@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" path="res://scripts/test_stage.gd" id="1_script"]
 [ext_resource type="PackedScene" path="res://scenes/player_bear.tscn" id="2_bear"]
-[ext_resource type="PackedScene" path="res://scenes/green_bear.tscn" id="3_green"]
+[ext_resource type="Script" path="res://scripts/green_bear_spawner.gd" id="3_spawner"]
 [ext_resource type="Script" path="res://scripts/candy_fence.gd" id="4_fence"]
 [ext_resource type="Script" path="res://scripts/round.gd" id="5_round"]
 [ext_resource type="Script" path="res://scripts/pause_menu.gd" id="6_menu"]
@@ -53,65 +53,8 @@ environment = SubResource("Environment_stage")
 [node name="CandyFence" type="StaticBody3D" parent="."]
 script = ExtResource("4_fence")
 
-[node name="GreenBear1" parent="." instance=ExtResource("3_green")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, 0, -5)
-wander_seed = 1
-
-[node name="GreenBear2" parent="." instance=ExtResource("3_green")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, -6)
-wander_seed = 2
-
-[node name="GreenBear3" parent="." instance=ExtResource("3_green")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7, 0, 3)
-wander_seed = 3
-
-[node name="GreenBear4" parent="." instance=ExtResource("3_green")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.5, 0, 4)
-wander_seed = 4
-
-[node name="GreenBear5" parent="." instance=ExtResource("3_green")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -8)
-wander_seed = 5
-
-[node name="GreenBear6" parent="." instance=ExtResource("3_green")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.4, 0, -5.3)
-wander_seed = 6
-
-[node name="GreenBear7" parent="." instance=ExtResource("3_green")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.8, 0, -2.3)
-wander_seed = 7
-
-[node name="GreenBear8" parent="." instance=ExtResource("3_green")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.7, 0, 2.6)
-wander_seed = 8
-
-[node name="GreenBear9" parent="." instance=ExtResource("3_green")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.2, 0, 2)
-wander_seed = 9
-
-[node name="GreenBear10" parent="." instance=ExtResource("3_green")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.4, 0, -8.3)
-wander_seed = 10
-
-[node name="GreenBear11" parent="." instance=ExtResource("3_green")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.9, 0, 5.3)
-wander_seed = 11
-
-[node name="GreenBear12" parent="." instance=ExtResource("3_green")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.7, 0, -8.1)
-wander_seed = 12
-
-[node name="GreenBear13" parent="." instance=ExtResource("3_green")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.4, 0, 7.7)
-wander_seed = 13
-
-[node name="GreenBear14" parent="." instance=ExtResource("3_green")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 6.7)
-wander_seed = 14
-
-[node name="GreenBear15" parent="." instance=ExtResource("3_green")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.5, 0, -6.8)
-wander_seed = 15
+[node name="GreenBears" type="Node3D" parent="."]
+script = ExtResource("3_spawner")
 
 [node name="Round" type="Node" parent="."]
 script = ExtResource("5_round")

@@ -3,8 +3,10 @@ extends CanvasLayer
 ## The pause menu, for the grown-up: Esc or the pad's Menu (Start) button
 ## opens it, pausing the game and freeing the mouse; Esc, Menu, B or Resume
 ## close it and put the mouse back as it was. The main page holds the
-## camera's invert toggle (right stick up/down), saved (settings.gd) so it
-## sticks, and a Sounds button. The Sounds page has one row per game sound
+## camera's invert toggle (right stick up/down) and the number of green bears
+## (left/right on the slider), both saved (settings.gd) so they stick, and a
+## Sounds button. Closing the menu with a new bear count restarts the round
+## with that many. The Sounds page has one row per game sound
 ## (sounds.gd): hold Record (A on the pad, or click and hold) to record up
 ## to 3 s, which then plays back; Play, and Clear (this computer's own
 ## recording; a sound shipped with the game comes back). B goes back. The D-pad or
@@ -13,6 +15,7 @@ extends CanvasLayer
 ## screen: project.godot's window/size/mode.template).
 
 const SETTINGS := preload("res://scripts/settings.gd")
+const SPAWNER := preload("res://scripts/green_bear_spawner.gd")
 
 ## [label, node path under the player, property]; the property is also the
 ## saved setting's key.
@@ -36,6 +39,10 @@ var _checks: Array[CheckButton] = []
 var _main_page: VBoxContainer
 var _sounds_page: VBoxContainer
 var _sounds_button: Button
+var _bears: HSlider
+var _bears_label: Label
+## The bear count when the menu opened; a different one on close restarts.
+var _bears_at_open := 0
 var _status: Label
 ## event -> [record, play, clear] buttons
 var _sound_buttons := {}
@@ -88,6 +95,28 @@ func _build_main_page() -> void:
 		check.toggled.connect(_on_toggled.bind(toggle[1], toggle[2]))
 		_main_page.add_child(check)
 		_checks.append(check)
+	var bears_row := HBoxContainer.new()
+	bears_row.add_theme_constant_override("separation", 16)
+	var bears_title := Label.new()
+	bears_title.text = "Green bears"
+	_sized(bears_title)
+	bears_row.add_child(bears_title)
+	_bears = HSlider.new()
+	_bears.min_value = SPAWNER.MIN_COUNT
+	_bears.max_value = SPAWNER.MAX_COUNT
+	_bears.step = 1
+	_bears.custom_minimum_size = Vector2(240, 0)
+	_bears.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_bears.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_bears.value_changed.connect(_on_bears_changed)
+	_bears.gui_input.connect(_on_bears_input)
+	bears_row.add_child(_bears)
+	_bears_label = Label.new()
+	_bears_label.custom_minimum_size = Vector2(40, 0)
+	_bears_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_sized(_bears_label)
+	bears_row.add_child(_bears_label)
+	_main_page.add_child(bears_row)
 	_sounds_button = _button("Sounds", _show_sounds)
 	_main_page.add_child(_sounds_button)
 	_main_page.add_child(_button("Resume", close))
@@ -137,6 +166,11 @@ func sound_rows() -> int:
 	return _sound_buttons.size()
 
 
+## The green bear count the slider shows.
+func bear_count() -> int:
+	return int(_bears.value)
+
+
 func open() -> void:
 	if visible:
 		return
@@ -146,6 +180,11 @@ func open() -> void:
 		var target := _target(TOGGLES[i][1])
 		if target != null:
 			_checks[i].set_pressed_no_signal(target.get(TOGGLES[i][2]))
+	# The count being played (the harness plays a fixed one, whatever is
+	# saved).
+	_bears_at_open = get_tree().get_nodes_in_group("green_bears").size()
+	_bears.set_value_no_signal(_bears_at_open)
+	_bears_label.text = str(_bears_at_open)
 	visible = true
 	get_tree().paused = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -160,6 +199,9 @@ func close() -> void:
 	visible = false
 	get_tree().paused = false
 	Input.mouse_mode = _mouse_mode_before
+	if bear_count() != _bears_at_open:
+		get_tree().reload_current_scene()
+		return
 	if is_instance_valid(_focus_before) and _focus_before.is_visible_in_tree():
 		_focus_before.grab_focus()
 	else:
@@ -232,6 +274,25 @@ func _on_clear(event: String) -> void:
 	_refresh_sounds()
 	# The Clear button just disabled itself; keep focus on the row.
 	(_sound_buttons[event][0] as Button).grab_focus()
+
+
+## Left/right (D-pad, stick, arrows) step the count by one. Handled here,
+## before the slider's own input, because in a real window the slider let
+## the D-pad move focus instead.
+func _on_bears_input(event: InputEvent) -> void:
+	var direction := 0
+	if event.is_action_pressed("ui_right", true):
+		direction = 1
+	elif event.is_action_pressed("ui_left", true):
+		direction = -1
+	if direction != 0:
+		_bears.value += direction * _bears.step
+		_bears.accept_event()
+
+
+func _on_bears_changed(value: float) -> void:
+	_bears_label.text = str(int(value))
+	SETTINGS.save_value(SPAWNER.SETTING, int(value))
 
 
 func _on_toggled(on: bool, path: String, property: String) -> void:

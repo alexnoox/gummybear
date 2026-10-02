@@ -21,7 +21,7 @@ const SHOT_SCHEDULE := {
 	6.60: "fireworks.png",
 	9.40: "restart.png",
 	9.60: "menu.png",
-	9.80: "sounds.png",
+	10.20: "sounds.png",
 }
 ## seconds -> silhouette window sampled after the frame is drawn
 const SILHOUETTE_SCHEDULE := {
@@ -56,7 +56,7 @@ const AIR_DRIVE_START := 0.55
 const AIR_DRIVE_END := 0.75
 const DRIVE_START := 1.6
 const DRIVE_END := 2.4
-const QUIT_AT := 10.2
+const QUIT_AT := 10.6
 ## After all world-axis checks, orbit the idle bear's camera a quarter turn:
 ## the body must stay put (no turn-in-place clip exists), and side.png shows
 ## the bear side-on for the shader's self-overlap check.
@@ -98,15 +98,22 @@ const SEETHROUGH_DISTANCE := 1.2
 const WIN_AT := 4.6
 const MAX_WIN_DELAY := 0.2
 ## Last, the pause menu, through real pad buttons, one step every MENU_STEP
-## s: Start opens it (pausing the game, freeing the mouse, focusing the
+## s, one button press per step, like a hand: Start opens it (pausing the game, freeing the mouse, focusing the
 ## invert toggle); A flips invert on (checked on the camera and in the saved
-## settings) and A flips it back; D-pad down then A opens the Sounds page
-## (one row per sound); B goes back to the main page and B again closes the
-## menu (unpausing, putting the mouse back as it was). The player's saved
-## settings file is backed up first and restored after.
+## settings) and A flips it back; D-pad down moves to the green bear count
+## and right raises it by one (saved), left puts it back; down then A opens
+## the Sounds page (one row per sound); B goes back to the main page and B
+## again closes the menu (unpausing, putting the mouse back as it was, and
+## not restarting the round, since the count ended up unchanged). The
+## player's saved settings file is backed up first and restored after.
 const MENU_START := 9.45
 const MENU_STEP := 0.1
-const MENU_LAST_STEP := 6
+const MENU_LAST_STEP := 10
+const JOY_DPAD_LEFT := 13
+const JOY_DPAD_RIGHT := 14
+## The harness always plays with this many green bears, whatever the
+## player's saved setting; first it checks the spawner by asking for 3.
+const HARNESS_BEARS := 15
 const SETTINGS_PATH := "user://settings.cfg"
 ## Recorded sounds: the harness can't use a microphone, so it gives every
 ## event a short synthetic beep, kept in its own folder (the player's
@@ -177,6 +184,10 @@ var _menu_failures: Array[String] = []
 var _menu_invert_before := false
 var _shipped_sounds: Array = []
 var _trim_failure := ""
+var _spawn_failure := ""
+## Counts harness starts across scene reloads: a second start means the
+## round restarted mid-run (nothing in the run should restart it).
+static var _starts := 0
 var _settings_backup: PackedByteArray
 var _settings_existed := false
 var _win_forced := false
@@ -198,6 +209,8 @@ func _ready() -> void:
 	if _settings_existed:
 		_settings_backup = FileAccess.get_file_as_bytes(SETTINGS_PATH)
 	AudioServer.set_bus_mute(AudioServer.get_bus_index("Master"), true)
+	_starts += 1
+	_spawn_failure = _check_spawn()
 	_trim_failure = _check_trim()
 	_shipped_sounds = Sounds.shipped_events()
 	print("[test_stage] shipped sounds: %s" % [", ".join(_shipped_sounds)])
@@ -417,11 +430,17 @@ func _saved_invert() -> Variant:
 	return saved.get_value("controls", "invert_stick_y", "missing")
 
 
+func _saved_bears() -> Variant:
+	var saved := ConfigFile.new()
+	saved.load(SETTINGS_PATH)
+	return saved.get_value("controls", "green_bears", "missing")
+
+
 func _run_menu_step(step: int) -> void:
 	var menu := get_node_or_null("PauseMenu")
-	if menu == null or not menu.has_method("sounds_page_open"):
+	if menu == null or not menu.has_method("bear_count"):
 		if step == 0:
-			_menu_failures.append("no PauseMenu with a Sounds page")
+			_menu_failures.append("no PauseMenu with a green bear count")
 		return
 	var rig := _bear.get_node("CameraRig")
 	match step:
@@ -445,24 +464,56 @@ func _run_menu_step(step: int) -> void:
 		3:
 			if rig.get("invert_stick_y") != _menu_invert_before:
 				_menu_failures.append("a second A didn't flip invert_stick_y back")
+			if menu.call("bear_count") != HARNESS_BEARS:
+				_menu_failures.append("the menu shows %d green bears (playing with %d)" %
+						[menu.call("bear_count"), HARNESS_BEARS])
 			_press_pad(JOY_DPAD_DOWN)
-			_press_pad(JOY_A)
 		4:
+			_press_pad(JOY_DPAD_RIGHT)
+		5:
+			if menu.call("bear_count") != HARNESS_BEARS + 1:
+				_menu_failures.append("D-pad down + right set the count to %d (want %d)" %
+						[menu.call("bear_count"), HARNESS_BEARS + 1])
+			if str(_saved_bears()) != str(HARNESS_BEARS + 1):
+				_menu_failures.append("the raised green bear count wasn't saved")
+			_press_pad(JOY_DPAD_LEFT)
+		6:
+			if menu.call("bear_count") != HARNESS_BEARS:
+				_menu_failures.append("D-pad left didn't put the count back")
+			_press_pad(JOY_DPAD_DOWN)
+		7:
+			_press_pad(JOY_A)
+		8:
 			if not menu.call("sounds_page_open"):
 				_menu_failures.append("D-pad down + A didn't open the Sounds page")
 			elif menu.call("sound_rows") != SOUND_EVENTS.size():
 				_menu_failures.append("the Sounds page has %d rows (want %d)" %
 						[menu.call("sound_rows"), SOUND_EVENTS.size()])
 			_press_pad(JOY_B)
-		5:
+		9:
 			if menu.call("sounds_page_open") or not menu.call("is_open"):
 				_menu_failures.append("B on the Sounds page didn't go back to the menu")
 			_press_pad(JOY_B)
-		6:
+		10:
 			if menu.call("is_open"):
 				_menu_failures.append("B didn't close the menu")
 			if get_tree().paused:
 				_menu_failures.append("closing the menu didn't unpause the game")
+
+
+## "" if the spawner puts out the asked-for number of green bears, else
+## what went wrong. Leaves HARNESS_BEARS of them on the stage.
+func _check_spawn() -> String:
+	var spawner := get_node_or_null("GreenBears")
+	if spawner == null or not spawner.has_method("spawn"):
+		return "no GreenBears spawner with spawn()"
+	var problem := ""
+	for count in [3, HARNESS_BEARS]:
+		spawner.call("spawn", count)
+		var got := get_tree().get_nodes_in_group("green_bears").size()
+		if got != count and problem.is_empty():
+			problem = "asking the spawner for %d green bears gave %d" % [count, got]
+	return problem
 
 
 ## "" if trimming a padded recording works, else what went wrong.
@@ -720,6 +771,10 @@ func _finish() -> void:
 	failures.append_array(_menu_failures)
 	if not _trim_failure.is_empty():
 		failures.append(_trim_failure)
+	if not _spawn_failure.is_empty():
+		failures.append(_spawn_failure)
+	if _starts > 1:
+		failures.append("the round restarted %d times during the run" % (_starts - 1))
 	_validate_sounds(failures)
 	_restore_settings()
 	for window: String in SILHOUETTE_LIMITS:
