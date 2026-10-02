@@ -31,6 +31,18 @@ const PITCH_JITTER := 0.1
 ## Events that never overlap themselves (footsteps would pile up).
 const NO_OVERLAP := ["walk"]
 const VOICES := 8
+## Trimming: a recording starts when Record is pressed, so it opens with the
+## silence before the voice (and ends with the pause before letting go),
+## which would play as a delay. Loudness is measured in TRIM_WINDOW (s)
+## slices; sound is any slice within TRIM_THRESHOLD of the loudest and above
+## TRIM_FLOOR (RMS, 16-bit), so hiss doesn't count. PRE_ROLL and POST_ROLL
+## (s) are kept around it, with FADE (s) ramps so the cut doesn't click.
+const TRIM_WINDOW := 0.01
+const TRIM_THRESHOLD := 0.1
+const TRIM_FLOOR := 300.0
+const PRE_ROLL := 0.03
+const POST_ROLL := 0.1
+const FADE := 0.01
 const RECORD_BUS := "Record"
 
 ## Recordings shipped with the game (imported by Godot, so a build carries
@@ -192,6 +204,8 @@ func stop_recording() -> void:
 	_mic.stop()
 	var event := _recording_event
 	_recording_event = ""
+	if wav != null:
+		wav = trim_silence(wav)
 	var ok := wav != null and _seconds(wav) >= MIN_SECONDS
 	if ok:
 		set_sound(event, wav)
@@ -203,6 +217,52 @@ func _process(delta: float) -> void:
 		_recording_left -= delta
 		if _recording_left <= 0.0:
 			stop_recording()
+
+
+## `wav` without the silence before and after the sound (16-bit only; other
+## formats, or a recording with no sound in it, come back unchanged).
+static func trim_silence(wav: AudioStreamWAV) -> AudioStreamWAV:
+	if wav.format != AudioStreamWAV.FORMAT_16_BITS:
+		return wav
+	var channels := 2 if wav.stereo else 1
+	var frame_bytes := 2 * channels
+	var data := wav.data
+	var frames := data.size() / frame_bytes
+	var window := maxi(1, int(wav.mix_rate * TRIM_WINDOW))
+	var levels := PackedFloat32Array()
+	for start in range(0, frames, window):
+		var energy := 0.0
+		var end := mini(start + window, frames)
+		for i in range(start * channels, end * channels):
+			var sample := float(data.decode_s16(i * 2))
+			energy += sample * sample
+		levels.append(sqrt(energy / ((end - start) * channels)))
+	var loudest := 0.0
+	for level in levels:
+		loudest = maxf(loudest, level)
+	var threshold := maxf(loudest * TRIM_THRESHOLD, TRIM_FLOOR)
+	var first := -1
+	var last := -1
+	for i in levels.size():
+		if levels[i] >= threshold:
+			if first < 0:
+				first = i
+			last = i
+	if first < 0:
+		return wav
+	var from := maxi(0, first * window - int(PRE_ROLL * wav.mix_rate))
+	var to := mini(frames, (last + 1) * window + int(POST_ROLL * wav.mix_rate))
+	var kept := data.slice(from * frame_bytes, to * frame_bytes)
+	var count := to - from
+	var fade := mini(int(FADE * wav.mix_rate), count / 2)
+	for f in fade:
+		var gain := float(f) / fade
+		for c in channels:
+			for at in [(f * channels + c) * 2, ((count - 1 - f) * channels + c) * 2]:
+				kept.encode_s16(at, int(kept.decode_s16(at) * gain))
+	var trimmed: AudioStreamWAV = wav.duplicate()
+	trimmed.data = kept
+	return trimmed
 
 
 func _path(event: String) -> String:

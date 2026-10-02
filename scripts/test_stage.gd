@@ -117,6 +117,13 @@ const SETTINGS_PATH := "user://settings.cfg"
 ## shipped in res://sounds when there is one, and be silent when not.
 const SOUND_EVENTS := ["throw", "hit", "pop", "win", "walk"]
 const HARNESS_SOUND_DIR := "user://harness_sounds"
+## Recordings start when Record is pressed, so they open with the silence
+## before the voice (up to ~0.9 s on the Mac's first takes), which then
+## plays as a delay. A recording of 0.8 s near-silence, 0.3 s of tone and
+## 0.5 s silence must come out of Sounds.trim_silence() with the tone
+## starting within MAX_TRIMMED_ONSET and no longer than MAX_TRIMMED_LENGTH.
+const MAX_TRIMMED_ONSET := 0.06
+const MAX_TRIMMED_LENGTH := 0.5
 const JOY_A := 0
 const JOY_B := 1
 const JOY_START := 6
@@ -169,6 +176,7 @@ var _menu_step := 0
 var _menu_failures: Array[String] = []
 var _menu_invert_before := false
 var _shipped_sounds: Array = []
+var _trim_failure := ""
 var _settings_backup: PackedByteArray
 var _settings_existed := false
 var _win_forced := false
@@ -190,6 +198,7 @@ func _ready() -> void:
 	if _settings_existed:
 		_settings_backup = FileAccess.get_file_as_bytes(SETTINGS_PATH)
 	AudioServer.set_bus_mute(AudioServer.get_bus_index("Master"), true)
+	_trim_failure = _check_trim()
 	_shipped_sounds = Sounds.shipped_events()
 	print("[test_stage] shipped sounds: %s" % [", ".join(_shipped_sounds)])
 	Sounds.use_directory(HARNESS_SOUND_DIR)
@@ -456,6 +465,45 @@ func _run_menu_step(step: int) -> void:
 				_menu_failures.append("closing the menu didn't unpause the game")
 
 
+## "" if trimming a padded recording works, else what went wrong.
+func _check_trim() -> String:
+	if not Sounds.has_method("trim_silence"):
+		return "Sounds has no trim_silence()"
+	var rate := 48000
+	var data := PackedByteArray()
+	var frames := int(rate * 1.6)
+	data.resize(frames * 4)  # 16-bit stereo
+	for f in frames:
+		var t := float(f) / rate
+		# A faint hiss throughout, the tone from 0.8 s to 1.1 s.
+		var v := randi_range(-40, 40)
+		if t >= 0.8 and t < 1.1:
+			v += int(sin(TAU * 440.0 * t) * 12000.0)
+		data.encode_s16(f * 4, v)
+		data.encode_s16(f * 4 + 2, v)
+	var wav := AudioStreamWAV.new()
+	wav.format = AudioStreamWAV.FORMAT_16_BITS
+	wav.stereo = true
+	wav.mix_rate = rate
+	wav.data = data
+	var trimmed: AudioStreamWAV = Sounds.trim_silence(wav)
+	var out := trimmed.data
+	var onset := -1.0
+	for f in out.size() / 4:
+		if absi(out.decode_s16(f * 4)) > 1000:
+			onset = float(f) / rate
+			break
+	var length := out.size() / 4.0 / rate
+	print("[test_stage] trim: tone at %.3f s of %.3f s (was 0.800 of 1.600)" % [onset, length])
+	if onset < 0.0:
+		return "trimming lost the tone"
+	if onset > MAX_TRIMMED_ONSET:
+		return "trimmed tone still starts %.2f s in" % onset
+	if length > MAX_TRIMMED_LENGTH:
+		return "trimmed recording is still %.2f s long" % length
+	return ""
+
+
 ## 0.2 s of a 440 Hz tone, 16-bit mono.
 func _beep() -> AudioStreamWAV:
 	var rate := 22050
@@ -670,6 +718,8 @@ func _finish() -> void:
 	if _menu_step <= MENU_LAST_STEP:
 		failures.append("pause menu steps never finished")
 	failures.append_array(_menu_failures)
+	if not _trim_failure.is_empty():
+		failures.append(_trim_failure)
 	_validate_sounds(failures)
 	_restore_settings()
 	for window: String in SILHOUETTE_LIMITS:
